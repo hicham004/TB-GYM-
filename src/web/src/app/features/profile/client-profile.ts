@@ -30,7 +30,12 @@ import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
 import { IntakeProfile } from '../intake/intake-profile';
 import { IntakeSteps } from '../intake/intake-steps';
-import type { IntakeOutcome, IntakeSaver } from '../intake/intake.models';
+import {
+  healthClosedRefusal,
+  isHealthStepClosed,
+  type IntakeOutcome,
+  type IntakeSaver,
+} from '../intake/intake.models';
 
 /**
  * My profile (R5.3b, M8). A new client answers a few short questions as steps, each saved as they go;
@@ -187,6 +192,14 @@ export class ClientProfilePage implements HoldsUnsavedWork {
           return { ok: true };
         } catch (error) {
           if (!owner.current) return { ok: false, message: '' };
+          if (isHealthStepClosed(error)) {
+            // The Health step closed since the page read it (Max ended, N9c5a): read the profile
+            // again so the step and its Edit close; a failed read keeps the page as it is.
+            const fresh = await firstValueFrom(this.api.getSelfProfile()).catch(() => null);
+            if (!owner.current) return { ok: false, message: '' };
+            if (fresh) this.profile.set(fresh);
+            return { ok: false, message: healthClosedRefusal({ kind: 'self' }) };
+          }
           return { ok: false, message: apiErrorMessage(error, fallback) };
         }
       },

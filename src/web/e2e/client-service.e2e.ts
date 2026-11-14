@@ -16,6 +16,7 @@ import {
   unpaidRenewal,
 } from '../src/testing/client-service-fixtures';
 import { COACH_NOW, LEA_ID, MAYA, OWNER_ID } from '../src/testing/coach-today-fixtures';
+import { houseMaxPlan, maxAsk } from '../src/testing/max-staff-fixtures';
 import { chooseDay, chooseOption, kitDateField, kitSelect } from './kit-controls';
 import {
   expect,
@@ -934,6 +935,191 @@ test.describe('a house trainee’s asks for a plan', () => {
       await expect(sheet.getByRole('alert')).toHaveText('Check the fields marked above.');
       await expectNoHorizontalOverflow(page);
       await axe(page);
+    });
+  });
+
+  /**
+   * Max (notes plan N9c5a): TB Gym coaching the trainee, for a limited number of places taken in the order
+   * asked. Maya asked for Max coaching, 4 weeks; the staff read where her ask stands in line.
+   */
+  test.describe('a Max ask (N9c5a)', () => {
+    const IN_LINE =
+      'Number 2 in line for Max. No place is open for this ask yet, so Maya’s page says not to send money.';
+
+    for (const [width, height] of [
+      [390, 844],
+      [1440, 900],
+    ] as const) {
+      test(`a Max ask in line at ${width}px waits for a place, and its booking sheet says why`, async ({
+        page,
+      }) => {
+        await openService(page, width, height, {
+          plans: [TRAINEE],
+          extra: asksRead([maxAsk()]),
+        });
+
+        const asks = panel(page);
+        await expect(asks.locator('.row-name')).toHaveText(['Max coaching, 4 weeks']);
+        await expect(asks.locator('.row-meta')).toHaveText(['USD 120 · asked Tue 29 Sep']);
+        await expect(asks.locator('app-status-pill')).toHaveText(['Waiting for a place']);
+        await expect(asks.locator('[data-place]')).toHaveText(IN_LINE);
+        await expect(asks.locator('[data-sent]')).toHaveCount(0);
+        // The server books by the places free, not by the turn: Book plan stays.
+        const book = asks.getByRole('button', { name: 'Book plan, Max coaching, 4 weeks' });
+        await expect(book).toBeEnabled();
+        await expectNoHorizontalOverflow(page);
+        await axe(page);
+        await page.screenshot({
+          path: test.info().outputPath(`n9c5b-max-ask-${width}.png`),
+          fullPage: true,
+        });
+
+        await book.click();
+        const sheet = page.getByRole('dialog', { name: 'Book the plan' });
+        await expect(sheet.locator('[data-no-place]')).toHaveText(
+          'Maya’s ask has no Max place yet, so they were told not to send money. Book it only if the money is there.',
+        );
+        await expect(sheet.getByLabel('Amount received')).toHaveValue('120');
+        await expectNoHorizontalOverflow(page);
+        await axe(page);
+      });
+    }
+
+    test('a Max ask whose place is open says Maya can pay, and a holder’s says they hold one', async ({
+      page,
+    }) => {
+      await openService(page, 1440, 900, {
+        plans: [TRAINEE],
+        extra: asksRead([
+          maxAsk({ placeOpen: true, placeInLine: 1 }),
+          maxAsk({
+            id: 'ask-max-held',
+            askedOn: '2026-09-20',
+            state: 'MoneySent',
+            placeOpen: true,
+            placeInLine: null,
+            moneySent: housePlanAsk().moneySent,
+          }),
+          housePlanAsk({ id: 'ask-pro', askedOn: '2026-09-10', state: 'Asked', moneySent: null }),
+        ]),
+      });
+
+      const asks = panel(page);
+      await expect(asks.locator('app-status-pill')).toHaveText([
+        'Waiting for the money',
+        'Says it’s sent',
+        'Waiting for the money',
+      ]);
+      await expect(asks.locator('.ask').nth(0).locator('[data-place]')).toHaveText(
+        'Number 1 in line for Max. A place is open, so Maya can pay.',
+      );
+      await expect(asks.locator('.ask').nth(1).locator('[data-place]')).toHaveText(
+        'Maya holds a Max place.',
+      );
+      // A Pro+ ask says nothing of Max's places.
+      await expect(asks.locator('.ask').nth(2).locator('[data-place]')).toHaveCount(0);
+      await axe(page);
+
+      await asks.getByRole('button', { name: 'Book plan, Max coaching, 4 weeks' }).first().click();
+      const sheet = page.getByRole('dialog', { name: 'Book the plan' });
+      await expect(sheet).toBeVisible();
+      await expect(sheet.locator('[data-no-place]')).toHaveCount(0);
+    });
+
+    test('a Max ask’s line reflows at 200% text at 390px', async ({ page }) => {
+      await openService(page, 390, 844, {
+        plans: [TRAINEE],
+        extra: asksRead([maxAsk({ placeInLine: null })]),
+      });
+      await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+      const asks = panel(page);
+      await expect(asks.locator('[data-place]')).toHaveText(
+        'Max is closed: TB Gym’s settings give it no places.',
+      );
+      await expect(asks.locator('app-status-pill')).toHaveText(['Waiting for a place']);
+      await expectNoHorizontalOverflow(page);
+      await expect(
+        asks.getByRole('button', { name: 'Book plan, Max coaching, 4 weeks' }),
+      ).toBeVisible();
+    });
+
+    test('a Max plan’s Manage plan keeps Renew plan closed, with the reason', async ({ page }) => {
+      // Max coaching ends on Mon 12 Oct, which the server flags: any other plan would get a filled Renew plan.
+      const max = houseMaxPlan({ lastActiveDate: '2026-10-12', endDateExclusive: '2026-10-13' });
+      await openService(page, 390, 844, {
+        plans: [plansOverview([max, freePlan()])],
+        extra: asksRead([]),
+      });
+
+      await expect(page.locator('#plan-title')).toHaveText('Max coaching');
+      await expect(page.locator('.hero-actions > button', { hasText: 'Renew plan' })).toHaveCount(
+        0,
+      );
+      await page.getByRole('button', { name: 'Manage plan' }).click();
+      const renew = page.locator('app-client-actions .item', { hasText: 'Renew plan' });
+      await expect(renew).toHaveAttribute('aria-disabled', 'true');
+      await expect(renew.locator('.item-hint')).toHaveText(
+        'Max is booked from the trainee’s ask, so its places are kept.',
+      );
+      // Listed but closed: choosing it opens nothing.
+      await renew.click({ force: true });
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+    });
+
+    test.describe('a refused booking', () => {
+      test.use({
+        allowedConsoleErrors: { patterns: [/status of 409 .*\/house-plan-asks\//] },
+      });
+
+      for (const width of [390, 1440]) {
+        test(`every Max place taken at ${width}px is said in the server’s words, then the asks are read again`, async ({
+          page,
+        }) => {
+          const message =
+            'Every place on Max is taken. Book this ask once a place opens, or close it.';
+          let reads = 0;
+          await openService(page, width, 900, {
+            plans: [TRAINEE],
+            extra: {
+              [`GET ${ASKS}`]: (route) => {
+                reads++;
+                return json(route, 200, [maxAsk({ placeOpen: reads === 1, placeInLine: 1 })]);
+              },
+              [`POST ${ASKS}/ask-max/book`]: (route) =>
+                json(route, 409, { code: 'house_max_full', message }),
+            },
+          });
+
+          const asks = panel(page);
+          await expect(asks.locator('[data-place]')).toHaveText(
+            'Number 1 in line for Max. A place is open, so Maya can pay.',
+          );
+          await asks.getByRole('button', { name: 'Book plan, Max coaching, 4 weeks' }).click();
+          const sheet = page.getByRole('dialog', { name: 'Book the plan' });
+          await sheet.getByRole('button', { name: 'Book plan' }).click();
+          await expect(sheet.getByRole('alert')).toHaveText(message);
+          await expect(sheet.getByLabel('Amount received')).not.toHaveAttribute(
+            'aria-invalid',
+            'true',
+          );
+          await expectNoHorizontalOverflow(page);
+          await axe(page);
+          expect(reads).toBe(1);
+
+          await sheet.getByRole('button', { name: 'Not now' }).click();
+          await expect(sheet).toBeHidden();
+          // The place was taken meanwhile: the asks are read again and say so.
+          await expect(asks.locator('[data-place]')).toHaveText(
+            'Number 1 in line for Max. No place is open for this ask yet, so Maya’s page says not to send money.',
+          );
+          await expect(asks.locator('app-status-pill')).toHaveText(['Waiting for a place']);
+          expect(reads).toBe(2);
+          await expect(page.locator('#asks-title')).toBeFocused();
+        });
+      }
     });
   });
 });

@@ -223,6 +223,32 @@ describe('Start a plan', () => {
     const [first, second] = assignProduct.mock.calls.map((call) => call[1].idempotencyKey);
     expect(second).toBe(first);
   });
+
+  it('says in the server’s words that Max is booked from the trainee’s ask, started or renewed (N9c5a)', async () => {
+    const message = "Max is booked from the trainee's ask, so its places are kept.";
+    const refusal = () =>
+      throwError(
+        () => new HttpErrorResponse({ status: 409, error: { code: 'house_max_by_ask', message } }),
+      );
+
+    const started = await renderStart({}, { assignProduct: vi.fn(refusal) });
+    pick(started.host, 'o-12');
+    press(started.host, 'Start plan');
+    await settle(started.fixture);
+    expect(textOf(formSummary(started.host))).toBe(message);
+    expect(document.activeElement).toBe(formSummary(started.host));
+    expect(started.closed).not.toHaveBeenCalled();
+    TestBed.resetTestingModule();
+
+    const renewed = await renderStart(
+      { renewFrom: enrollment() },
+      { renewEnrollment: vi.fn(refusal) },
+    );
+    press(renewed.host, 'Renew plan');
+    await settle(renewed.fixture);
+    expect(textOf(formSummary(renewed.host))).toBe(message);
+    expect(renewed.closed).not.toHaveBeenCalled();
+  });
 });
 
 // ------------------------------------------------------------------------------------------------

@@ -36,7 +36,8 @@ type Setting =
   | 'MinimumSignUpAge'
   | 'FreeProgressDays'
   | 'MediaStorageGigabytes'
-  | 'WhishNumber';
+  | 'WhishNumber'
+  | 'MaxPlaces';
 
 /** A Whish number in the one form the server keeps (CLI-023): each run of spaces one, none after the +. */
 function whishForm(value: string | null): string | null {
@@ -499,8 +500,9 @@ test('emptying a setting sends no value, and the toast says sign-up is closed', 
 });
 
 /**
- * Every setting the house has since notes plan N9c1: sign-up's two, Free's window, the house's storage, and
- * its Whish number for plans, never set yet, so asks for a paid plan are closed.
+ * Every setting the house has since notes plan N9c5a: sign-up's two, Free's window, the house's storage, its
+ * Whish number for plans, never set yet, so asks for a paid plan are closed, and Max's places, last as the
+ * server lists them, never set either, so Max is closed (it is built switched off).
  */
 function allSettings(): SettingView[] {
   return [
@@ -523,6 +525,14 @@ function allSettings(): SettingView[] {
     },
     {
       setting: 'WhishNumber',
+      value: null,
+      version: 0,
+      changedAtUtc: null,
+      changedByUserId: null,
+      changedByName: null,
+    },
+    {
+      setting: 'MaxPlaces',
       value: null,
       version: 0,
       changedAtUtc: null,
@@ -693,6 +703,100 @@ for (const width of [390, 1440]) {
   });
 }
 
+const MAX_LABEL = 'Trainees on Max at a time';
+const MAX_CHANGE = 'Change the number of trainees on Max at a time';
+const MAX_HELP =
+  'A whole number from 0 to 1,000. Empty or 0 keeps Max closed. A booked Max plan keeps its place until it ends.';
+const MAX_REASON = 'Enter a whole number from 0 to 1,000, or leave it empty.';
+const maxSheet = (page: Page) => page.getByRole('dialog', { name: MAX_CHANGE, exact: true });
+
+for (const [width, dark] of [
+  [390, false],
+  [1440, false],
+  [390, true],
+] as const) {
+  test(`trainees on Max at a time at ${width}px${dark ? ' in dark mode' : ''} is set in its sheet, and 0 or empty closes Max (N9c5b)`, async ({
+    page,
+  }) => {
+    const record = await openHouse(page, width, {
+      dark,
+      record: new HouseRecord({ settings: allSettings() }),
+    });
+    const max = settingRow(page, 'MaxPlaces');
+    const value = max.locator('[data-value]');
+    // Last, as the server lists it, and never named for this week's sign-up places.
+    await expect(page.locator('[data-settings] li[data-setting]').last()).toHaveAttribute(
+      'data-setting',
+      'MaxPlaces',
+    );
+    await expect(max.locator('strong')).toHaveText(MAX_LABEL);
+    await expect(value).toHaveText('Empty');
+    await expect(max.locator('[data-changed]')).toHaveText('Never set');
+    if (dark) await expectDark(page);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+
+    await max.getByRole('button', { name: MAX_CHANGE }).click();
+    const sheet = maxSheet(page);
+    const number = sheet.getByLabel(MAX_LABEL);
+    await expect(sheet.locator('[data-in-force]')).toHaveText('In force now: Empty · Never set');
+    await expect(sheet).toContainText(MAX_HELP);
+    await expect(number).toHaveAttribute('type', 'number');
+    await expect(number).toHaveAttribute('min', '0');
+    await expect(number).toHaveAttribute('max', '1000');
+
+    // Over 1,000: the sheet says why under the box and sends nothing.
+    await number.fill('1001');
+    await sheet.getByRole('button', { name: 'Save' }).click();
+    await expect(sheet.getByText(MAX_REASON)).toBeVisible();
+    await expect(number).toHaveAttribute('aria-invalid', 'true');
+    await expect(number).toBeFocused();
+    expect(record.puts).toEqual([]);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({
+      path: test.info().outputPath(`n9c5b-house-max-sheet-${width}${dark ? '-dark' : ''}.png`),
+    });
+
+    await number.fill('6');
+    await sheet.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByText('Trainees on Max at a time is now 6.')).toBeVisible();
+    await expect(value).toHaveText('6');
+    await expect(max.locator('[data-changed]')).toHaveText('Changed by Ziad Matar on Thu 12 Nov');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({
+      path: test.info().outputPath(`n9c5b-house-max-${width}${dark ? '-dark' : ''}.png`),
+      fullPage: true,
+    });
+
+    await max.getByRole('button', { name: MAX_CHANGE }).click();
+    await maxSheet(page).getByLabel(MAX_LABEL).fill('0');
+    await maxSheet(page).getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(
+      page.getByText('Trainees on Max at a time is now 0, so Max is closed.'),
+    ).toBeVisible();
+    await expect(value).toHaveText('0');
+
+    await max.getByRole('button', { name: MAX_CHANGE }).click();
+    await maxSheet(page).getByLabel(MAX_LABEL).fill('');
+    await maxSheet(page).getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(
+      page.getByText('Trainees on Max at a time is now empty, so Max is closed.'),
+    ).toBeVisible();
+    await expect(value).toHaveText('Empty');
+    await expect(page.getByText('sign-up is closed')).toHaveCount(0);
+    expect(record.puts).toEqual([
+      { setting: 'MaxPlaces', body: { value: '6', expectedVersion: 0 } },
+      { setting: 'MaxPlaces', body: { value: '0', expectedVersion: 1 } },
+      { setting: 'MaxPlaces', body: { value: null, expectedVersion: 2 } },
+    ]);
+  });
+}
+
 test('Platform billing’s House link opens the page, and its own link leads back', async ({
   page,
 }) => {
@@ -749,4 +853,24 @@ test('the page and its sheet reflow at 200% text on a phone', async ({ page }) =
   await expect(sheetOf(page).locator('[data-in-force]')).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: test.info().outputPath('n9a2-house-sheet-200.png') });
+});
+
+test('trainees on Max at a time and its sheet reflow at 200% text on a phone (N9c5b)', async ({
+  page,
+}) => {
+  await openHouse(page, 390, { record: new HouseRecord({ settings: allSettings() }) });
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  const max = settingRow(page, 'MaxPlaces');
+  await expect(max.locator('strong')).toHaveText(MAX_LABEL);
+  await max.scrollIntoViewIfNeeded();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: test.info().outputPath('n9c5b-house-max-200.png'),
+    fullPage: true,
+  });
+
+  await max.getByRole('button', { name: MAX_CHANGE }).click();
+  await expect(maxSheet(page)).toContainText(MAX_HELP);
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: test.info().outputPath('n9c5b-house-max-sheet-200.png') });
 });

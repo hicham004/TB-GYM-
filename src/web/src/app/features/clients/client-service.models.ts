@@ -10,6 +10,7 @@ import type {
   SessionEntry,
   SessionPack,
 } from '../../core/api/api.models';
+import type { HouseTier } from '../../core/api/generated';
 import type { UiMenuItem } from '../../ui/menu';
 import type { SelectOption } from '../../ui/select';
 import type { StatusPillTone } from '../../ui/status-pill';
@@ -98,6 +99,8 @@ export interface PlanCard {
   readonly free: boolean;
   /** A session pack, which runs beside a coaching plan rather than following it (ADR 0038). */
   readonly isPack: boolean;
+  /** The house's tier of the plan (SUB-019); null outside the house's own plans. */
+  readonly tier: HouseTier | null;
 }
 
 const FEATURE_ORDER: readonly CoachingFeature[] = [
@@ -307,6 +310,7 @@ export function planCard(plan: ClientEnrollment, context: ServiceContext): PlanC
     cancelled: plan.storedStatus === 'Cancelled',
     free,
     isPack: Boolean(plan.sessions),
+    tier: plan.houseTier ?? null,
   };
 }
 
@@ -731,7 +735,13 @@ export function primaryAction(
     prompt?.enrollment.id === card.id ||
     (renewalAsked && nothingAfter) ||
     (card.over && !card.cancelled && nothingAfter);
-  return renew ? { id: 'renew', label: $localize`Renew plan` } : null;
+  // Max is booked from the trainee's ask alone, so its places are kept (N9c5a): never a filled Renew.
+  return renew && card.tier !== 'Max' ? { id: 'renew', label: $localize`Renew plan` } : null;
+}
+
+/** Why a Max plan is never renewed here: the server's own sentence (house_max_by_ask, N9c5a). */
+export function maxByAskHint(): string {
+  return $localize`Max is booked from the trainee’s ask, so its places are kept.`;
 }
 
 /**
@@ -765,18 +775,20 @@ export function planMenu(
       );
     }
     add(
-      renewable
-        ? {
-            label: $localize`Renew plan`,
-            hint: $localize`A new plan that follows this one`,
-            action: 'renew',
-          }
-        : {
-            label: $localize`Renew plan`,
-            hint: $localize`None of this plan’s price options is offered now`,
-            action: 'renew',
-            disabled: true,
-          },
+      card.tier === 'Max'
+        ? { label: $localize`Renew plan`, hint: maxByAskHint(), action: 'renew', disabled: true }
+        : renewable
+          ? {
+              label: $localize`Renew plan`,
+              hint: $localize`A new plan that follows this one`,
+              action: 'renew',
+            }
+          : {
+              label: $localize`Renew plan`,
+              hint: $localize`None of this plan’s price options is offered now`,
+              action: 'renew',
+              disabled: true,
+            },
     );
     if (card.canResume) {
       add({

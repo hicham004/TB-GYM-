@@ -485,6 +485,30 @@ test('Actions holds the rest, opens on a key, moves with the arrows and closes o
   );
 });
 
+test('Edit intake names health while the client’s Health step is open (N9c5a)', async ({
+  page,
+}) => {
+  await openProfile(page, 1440, 900);
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await expect(page.getByRole('link', { name: /Edit intake/ })).toContainText(
+    'Goals, health and contact details',
+  );
+});
+
+test('Edit intake leaves health out for a trainee of TB Gym’s own space off Max (N9c5a)', async ({
+  page,
+}) => {
+  // Their Health step is closed, so the hint does not offer it.
+  await openProfile(page, 390, 844, { details: { healthStepOpen: false } });
+  await page.getByRole('button', { name: 'Actions' }).click();
+  const editIntake = page.getByRole('link', { name: /Edit intake/ });
+  await expect(editIntake).toContainText('Goals and contact details');
+  await expect(editIntake).not.toContainText('health');
+  await expect(editIntake).toHaveAttribute('href', `/clients/${ID}/intake`);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+});
+
 test('the Overview and Progress follow dark mode', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await openProfile(page, 1440, 900, { overview: WAITING });

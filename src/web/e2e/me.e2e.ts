@@ -1465,6 +1465,150 @@ test.describe('a self-directed trainee of TB Gym’s own space (notes plan N9a2)
   });
 });
 
+// ---------- a trainee of the house whom Max coaches, and one on Free (notes plan N9c5b) ----------
+
+/** TB Gym's coach for a Max trainee, as the coach's read names them. */
+const HOUSE_COACH = 'Joelle Nassar';
+
+/**
+ * Max's four features granted, and a profile that is the house's (`selfDirected`) and coached by it
+ * (`coachedByTheHouse`, N9c5a), with the Health step open.
+ */
+const MAX_TRAINEE: Record<string, Handler> = {
+  'GET /api/client-access/me': (route) =>
+    json(
+      route,
+      200,
+      FEATURES.map((feature) => ({
+        feature,
+        isAllowed: feature !== 'ResourceLibrary',
+        reason: feature !== 'ResourceLibrary' ? 'Granted' : 'NoEntitlement',
+      })),
+    ),
+  'GET /api/client-profile/me': (route) =>
+    json(
+      route,
+      200,
+      finishedProfile({ selfDirected: true, coachedByTheHouse: true, healthStepOpen: true }),
+    ),
+  'GET /api/client-profile/me/coach': (route) =>
+    json(route, 200, { name: HOUSE_COACH, foundingCoach: false, lines: [] }),
+};
+
+/** A trainee on Free alone: the house's, coached by nobody, the Health step closed (N9c5a). */
+const FREE_TRAINEE: Record<string, Handler> = {
+  ...TRAINEE,
+  'GET /api/client-profile/me': (route) =>
+    json(
+      route,
+      200,
+      finishedProfile({ selfDirected: true, coachedByTheHouse: false, healthStepOpen: false }),
+    ),
+};
+
+test.describe('a trainee of the house whom Max coaches, on Me (notes plan N9c5b)', () => {
+  for (const [width, height, mode] of [
+    [390, 844, 'system'],
+    [1440, 900, 'system'],
+    [390, 844, 'dark'],
+  ] as const) {
+    test(`Me at ${width}px, ${mode}, reads their coach as a coach’s client does, with Message`, async ({
+      page,
+    }) => {
+      const coachReads: string[] = [];
+      page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/api/client-profile/me/coach') {
+          coachReads.push(request.url());
+        }
+      });
+      await openMe(page, {
+        width,
+        height,
+        memberships: [HOUSE],
+        user: { preferredThemeMode: mode },
+        extra: MAX_TRAINEE,
+      });
+
+      const coach = page.getByRole('link', { name: /Your coach.*Joelle Nassar.*Message/ });
+      await expect(coach).toHaveAttribute('href', '/messages');
+      await expect(coach.locator('.coach-label')).toHaveText('Your coach');
+      await expect(coach.locator('.coach-text strong')).toHaveText(HOUSE_COACH);
+      await expect(coach.locator('.coach-action')).toHaveText('Message');
+      await expect(page.locator('[data-self-directed]')).toHaveCount(0);
+      await expect(page.getByText('Self-directed')).toHaveCount(0);
+      expect(coachReads).toHaveLength(1);
+      // The Health step is open on Max: My profile's row names it, as for a coach's client.
+      await expect(page.getByRole('link', { name: /My profile/ }).locator('small')).toHaveText(
+        'Your goals, health details and contact info',
+      );
+      if (mode === 'dark') await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolationsWhereReached(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9c5b-me-max-${width}-${mode}.png`),
+        fullPage: true,
+      });
+    });
+  }
+
+  test.describe('whose coach left', () => {
+    test.use({
+      allowedConsoleErrors: { patterns: [/status of 404 .*\/api\/client-profile\/me\/coach/] },
+    });
+
+    test('Me at 390px reads N9d2’s Waiting for a new coach, with nothing to write to', async ({
+      page,
+    }) => {
+      await openMe(page, {
+        memberships: [HOUSE],
+        extra: {
+          ...MAX_TRAINEE,
+          'GET /api/client-profile/me/coach': (route) => json(route, 404, { title: 'Not Found' }),
+        },
+      });
+
+      const card = page.locator('[data-waiting-coach]');
+      await expect(card).toHaveText(
+        /Your coach\s*,?\s*Waiting for a new coach\.?\s*Your coaching space will tell you when you have one\./,
+      );
+      await expect(page.locator('a.coach, [data-self-directed]')).toHaveCount(0);
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolationsWhereReached(page);
+    });
+  });
+
+  for (const [width, height] of [
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    test(`a trainee on Free keeps Me’s self-directed card at ${width}px, and My profile names no health details`, async ({
+      page,
+    }) => {
+      const coachReads: string[] = [];
+      page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/api/client-profile/me/coach') {
+          coachReads.push(request.url());
+        }
+      });
+      await openMe(page, { width, height, memberships: [HOUSE], extra: FREE_TRAINEE });
+
+      const card = page.locator('.hero .coach[data-self-directed]');
+      await expect(card.locator('.coach-text')).toHaveText('Self-directed · TB Gym coaching space');
+      await expect(page.locator('a.coach')).toHaveCount(0);
+      expect(coachReads).toEqual([]);
+      const profile = page.getByRole('link', { name: /My profile/ });
+      await expect(profile.locator('small')).toHaveText('Your goals and contact info');
+      await expect(profile).toHaveAccessibleName(/^My profile\s*,\s*Your goals and contact info$/);
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolationsWhereReached(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9c5b-me-free-${width}.png`),
+        fullPage: true,
+      });
+    });
+  }
+});
+
 // ---------- a self-directed trainee's My plan: Free, the plans TB Gym sells, the ask (notes plan N9c2) ----------
 
 /** Free, as `GET /api/client-plan/me` gives it to a trainee of the house (N9b1). */
@@ -1585,12 +1729,15 @@ async function openTraineePlan(
     plans?: object[];
     house?: HouseRead | (() => HouseRead);
     extra?: Record<string, Handler>;
+    /** The signed-in account, e.g. its light or dark choice (N9c5b). */
+    user?: Partial<User>;
   } = {},
 ) {
   await page.setViewportSize({ width: options.width ?? 390, height: options.height ?? 844 });
   const house = options.house ?? ASKS_OFF;
   await mockClient(page, {
     memberships: [HOUSE],
+    user: options.user,
     extra: {
       ...TRAINEE,
       'GET /api/client-plan/me': (route) =>
@@ -2071,6 +2218,302 @@ test.describe('a self-directed trainee’s My plan (notes plan N9c2)', () => {
       await expect(failed).toHaveCount(0);
       expect(reads).toBe(2);
     });
+  });
+});
+
+// ---------- a trainee's My plan while every place on Max is taken (notes plan N9c5b) ----------
+
+/** A month of Max, as `GET /api/house-plans/me` lists it while Max is open and every place is taken. */
+const MAX_MONTH = {
+  offerId: '00000000-0000-4000-8000-0000000000e3',
+  productId: '00000000-0000-4000-8000-0000000000e4',
+  tier: 'Max',
+  name: 'Max',
+  description: 'TB Gym coaches you: your program, your food, a check-in each week and messages.',
+  optionLabel: 'A month',
+  priceAmount: 120 as number | string,
+  priceCurrency: 'USD',
+  durationCount: 4,
+  durationUnit: 'Week',
+  features: ['Training', 'Nutrition', 'CheckIns', 'Messaging'],
+  placeOpen: false as boolean | null,
+};
+
+/** Max listed first, as the server orders the plans by name, then Pro+'s two options. */
+const ASKS_ON_FULL: HouseRead = { ...ASKS_ON, plans: [MAX_MONTH, PRO_4_WEEKS, PRO_TWO_BLOCKS] };
+
+/** An ask for a month of Max: waiting for its place unless a test says otherwise. */
+const maxAsk = (overrides: object = {}) =>
+  askOf(MAX_MONTH, { tier: 'Max', placeOpen: false, ...overrides });
+
+const FULL_LINE =
+  'Every place on Max is taken right now. You can still ask: your ask waits in line, and you send money only once a place opens for you.';
+const WAITS_WORDS =
+  'Every place on Max is taken right now, so your ask waits in line, in the order asked. Don’t send money yet: once a place opens for you, this page shows where to send it. Free keeps running underneath.';
+const ASKED_IN_LINE =
+  'Asked. You’re in line for a place on Max; don’t send money until this page says one is open.';
+const NOT_OPEN =
+  'A Max place isn’t open for you yet. Your ask is kept in line; don’t send money until a place opens.';
+
+const maxCard = (page: Page) =>
+  page.getByRole('region', { name: 'Your ask Max, A month · USD 120 for 4 weeks', exact: true });
+
+test.describe('a trainee’s My plan while every place on Max is taken (notes plan N9c5b)', () => {
+  for (const [width, height, mode] of [
+    [390, 844, 'system'],
+    [1440, 900, 'system'],
+    [390, 844, 'dark'],
+  ] as const) {
+    test(`at ${width}px, ${mode}, Max says every place is taken under what it includes, and its Ask for stays`, async ({
+      page,
+    }) => {
+      await openTraineePlan(page, {
+        width,
+        height,
+        house: ASKS_ON_FULL,
+        user: { preferredThemeMode: mode },
+      });
+
+      const add = page.getByRole('region', { name: 'Plans you can add' });
+      const max = add.getByRole('article', { name: 'Max', exact: true });
+      await expect(max.locator('.includes li')).toHaveText([
+        'Training',
+        'Nutrition',
+        'Check-ins',
+        'Messaging',
+      ]);
+      const line = max.locator('[data-place-line]');
+      await expect(line).toHaveText(FULL_LINE);
+      const ask = max.getByRole('button', { name: 'Ask for A month, Max', exact: true });
+      await expect(ask).toHaveText('Ask for A month');
+      await expect(ask).toHaveAccessibleDescription(FULL_LINE);
+      // Pro+ says nothing of places.
+      const pro = add.getByRole('article', { name: 'Pro+', exact: true });
+      await expect(pro.locator('[data-place-line]')).toHaveCount(0);
+      await expect(
+        pro.getByRole('button', { name: 'Ask for 4 weeks, Pro+', exact: true }),
+      ).toHaveAccessibleDescription('');
+      if (mode === 'dark') await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolations(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9c5b-plan-max-full-${width}-${mode}.png`),
+        fullPage: true,
+      });
+    });
+  }
+
+  test('asks for Max in line: the sheet says not to send money yet, and the card shows nothing to pay', async ({
+    page,
+  }) => {
+    const asks: Record<string, unknown>[] = [];
+    const sent: unknown[] = [];
+    await openTraineePlan(page, {
+      house: () => ({ ...ASKS_ON_FULL, asks }),
+      extra: {
+        'POST /api/house-plans/me/asks': (route) => {
+          sent.push(route.request().postDataJSON());
+          const ask = maxAsk();
+          asks.unshift(ask);
+          return json(route, 201, ask);
+        },
+      },
+    });
+
+    await page.getByRole('button', { name: 'Ask for A month, Max', exact: true }).click();
+    const confirm = page.getByRole('dialog', { name: 'Ask for Max' });
+    await expect(confirm.locator('[data-ask-choice]')).toHaveText('A month · 4 weeks · USD 120');
+    const words = confirm.getByRole('region', { name: 'The plan you ask for' });
+    await expect(words.locator('[data-ask-waits]')).toHaveText(WAITS_WORDS);
+    await expect(words).not.toContainText('You pay TB Gym by Whish');
+    await expect(
+      words.getByText('You can ask for something else once TB Gym books or closes this ask.'),
+    ).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: test.info().outputPath('n9c5b-plan-max-ask-sheet-390.png') });
+    await confirm.getByRole('button', { name: 'Ask for it' }).click();
+
+    await expect(confirm).toHaveCount(0);
+    expect(sent).toEqual([{ offerId: MAX_MONTH.offerId }]);
+    const card = maxCard(page);
+    await expect(card.getByText('Waiting for a place', { exact: true })).toBeVisible();
+    await expect(card.locator('app-status-pill')).toHaveClass(/\binfo\b/);
+    const news = card.getByRole('status');
+    await expect(news).toHaveText(ASKED_IN_LINE);
+    await expect(news).toBeFocused();
+    await expect(
+      card.getByText('Nothing changes until TB Gym books it. Free keeps running.'),
+    ).toBeVisible();
+    // Nothing says to send money: no Whish number, no Copy, no I've paid.
+    await expect(card.getByRole('button')).toHaveCount(0);
+    await expect(card).not.toContainText(WHISH);
+    await expect(card).not.toContainText('If you already sent the money');
+    await expect(page.locator('[data-plans-to-add]')).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c5b-plan-max-waiting-390.png'),
+      fullPage: true,
+    });
+
+    // Read again later, the card says the server's own sentence where it stands.
+    await page.reload();
+    await expect(maxCard(page).getByRole('status')).toHaveText(NOT_OPEN);
+    await expect(maxCard(page).getByRole('button')).toHaveCount(0);
+  });
+
+  for (const [width, height, mode] of [
+    [1440, 900, 'system'],
+    [390, 844, 'dark'],
+  ] as const) {
+    test(`at ${width}px, ${mode}, a Max ask waiting for its place reads the server’s sentence, with nothing to pay`, async ({
+      page,
+    }) => {
+      await openTraineePlan(page, {
+        width,
+        height,
+        house: { ...ASKS_ON_FULL, asks: [maxAsk()] },
+        user: { preferredThemeMode: mode },
+      });
+
+      const card = maxCard(page);
+      await expect(card.getByText('Waiting for a place', { exact: true })).toBeVisible();
+      await expect(card.getByRole('status')).toHaveText(NOT_OPEN);
+      await expect(card.getByRole('button')).toHaveCount(0);
+      await expect(card).not.toContainText(WHISH);
+      if (mode === 'dark') await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolations(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9c5b-plan-max-waiting-${width}-${mode}.png`),
+        fullPage: true,
+      });
+    });
+  }
+
+  test('a Max ask whose place is open reads as Pro+’s, with where to send the money and I’ve paid', async ({
+    page,
+  }) => {
+    await openTraineePlan(page, {
+      house: { ...ASKS_ON_FULL, asks: [maxAsk({ placeOpen: true })] },
+    });
+
+    const card = maxCard(page);
+    await expect(card.getByText('Waiting for your payment', { exact: true })).toBeVisible();
+    await expect(card.locator('[data-place-open]')).toHaveText(
+      'A place on Max is open for you now.',
+    );
+    await expect(
+      card.getByText(`Send USD 120 by Whish to ${WHISH}, then tell TB Gym you sent it.`),
+    ).toBeVisible();
+    // Said first, then where to send the money.
+    const order = await card
+      .locator('[data-place-open], .whish')
+      .evaluateAll((nodes) => nodes.map((node) => node.hasAttribute('data-place-open')));
+    expect(order).toEqual([true, false]);
+    await expect(card.getByRole('button', { name: 'Copy the Whish number' })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'I’ve paid' })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c5b-plan-max-place-open-390.png'),
+      fullPage: true,
+    });
+  });
+
+  test('the waiting card keeps its pill and its sentence inside it at 200% text', async ({
+    page,
+  }) => {
+    await openTraineePlan(page, { house: { ...ASKS_ON_FULL, asks: [maxAsk()] } });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    const card = maxCard(page);
+    const news = card.getByRole('status');
+    await expect(news).toHaveText(NOT_OPEN);
+    await expectNoHorizontalOverflow(page);
+    // The card clips what overflows it, so the page never scrolls sideways: each part's own edges are read.
+    const box = (await card.locator('.plan-head').boundingBox())!;
+    for (const part of [card.locator('app-status-pill'), news, card.locator('#ask-line')]) {
+      const edge = (await part.boundingBox())!;
+      expect(edge.x).toBeGreaterThanOrEqual(box.x - 0.5);
+      expect(edge.x + edge.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
+      expect(edge.y + edge.height).toBeLessThanOrEqual(box.y + box.height + 0.5);
+    }
+    await page.screenshot({
+      path: test.info().outputPath('n9c5b-plan-max-waiting-200-percent-390.png'),
+      fullPage: true,
+    });
+  });
+
+  test('the full Max card and its Ask for keep inside the screen at 200% text', async ({
+    page,
+  }) => {
+    await openTraineePlan(page, { house: ASKS_ON_FULL });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    const max = page.getByRole('article', { name: 'Max', exact: true });
+    await expect(max.locator('[data-place-line]')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    const box = (await max.boundingBox())!;
+    const line = (await max.locator('[data-place-line]').boundingBox())!;
+    expect(line.x + line.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
+  });
+
+  test.describe('when the server refuses I’ve paid', () => {
+    test.use({
+      allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/house-plans\/me\/asks/] },
+    });
+
+    for (const [code, message] of [
+      ['house_max_place_not_open', NOT_OPEN],
+      [
+        'house_max_closed',
+        'Max isn’t taking anyone right now. Your ask is kept; don’t send money until it opens again.',
+      ],
+    ] as const) {
+      test(`${code} says the server’s words in the sheet, and the page reads the ask again without I’ve paid`, async ({
+        page,
+      }) => {
+        let reads = 0;
+        await openTraineePlan(page, {
+          house: () => {
+            reads += 1;
+            return {
+              ...ASKS_ON_FULL,
+              asks: [reads === 1 ? maxAsk({ placeOpen: true }) : maxAsk()],
+            };
+          },
+          extra: {
+            [`POST /api/house-plans/me/asks/${ASK_ID}/money-sent`]: (route) =>
+              json(route, 409, { code, message }),
+          },
+        });
+
+        const card = maxCard(page);
+        await card.getByRole('button', { name: 'I’ve paid' }).click();
+        const paid = page.getByRole('dialog', { name: 'I’ve paid' });
+        await paid.getByLabel('Name on your Whish account').fill('Rima Aboud');
+        await paid.getByLabel('Your Whish number').fill('+961 71 234567');
+        await paid.getByRole('button', { name: 'Send' }).click();
+        const summary = paid.getByRole('alert');
+        await expect(summary).toHaveText(message);
+        await expect(summary).toBeFocused();
+        await expectNoAxeViolations(page);
+        await page.screenshot({
+          path: test.info().outputPath(`n9c5b-plan-max-refused-${code}-390.png`),
+        });
+        await paid.getByRole('button', { name: 'Not now' }).click();
+
+        await expect(paid).toHaveCount(0);
+        await expect(card.getByRole('button', { name: 'I’ve paid' })).toHaveCount(0);
+        await expect(card.getByText('Waiting for a place', { exact: true })).toBeVisible();
+        const news = card.getByRole('status');
+        await expect(news).toHaveText(NOT_OPEN);
+        await expect(news).toBeFocused();
+        expect(reads).toBe(2);
+      });
+    }
   });
 });
 

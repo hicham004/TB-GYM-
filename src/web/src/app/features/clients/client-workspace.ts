@@ -284,7 +284,11 @@ export class ClientWorkspace {
       service,
       {
         label: $localize`Edit intake`,
-        hint: $localize`Goals, health and contact details`,
+        // A trainee of TB Gym's own space off Max has no Health step to edit (N9c5a).
+        hint:
+          this.context.profile()?.healthStepOpen === false
+            ? $localize`Goals and contact details`
+            : $localize`Goals, health and contact details`,
         link: `${base}/intake`,
       },
     ];

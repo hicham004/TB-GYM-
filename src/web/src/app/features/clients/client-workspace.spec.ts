@@ -549,6 +549,30 @@ describe('ClientWorkspace', () => {
     ]);
   });
 
+  describe('Edit intake’s hint (N9c5a)', () => {
+    const hintOfEditIntake = (host: HTMLElement) =>
+      Array.from(host.querySelectorAll('app-client-actions a.item'))
+        .find((item) => item.querySelector('.item-title')?.textContent?.trim() === 'Edit intake')
+        ?.querySelector('.item-hint')
+        ?.textContent?.trim();
+
+    it('names health while the client’s Health step is open, or the read does not say', async () => {
+      const { host, harness } = await render();
+      press(host, 'Actions');
+      await settle(harness.fixture);
+
+      expect(hintOfEditIntake(host)).toBe('Goals, health and contact details');
+    });
+
+    it('leaves health out for a trainee of TB Gym’s own space off Max, whose step is closed', async () => {
+      const { host, harness } = await render({ profile: { ...PROFILE, healthStepOpen: false } });
+      press(host, 'Actions');
+      await settle(harness.fixture);
+
+      expect(hintOfEditIntake(host)).toBe('Goals and contact details');
+    });
+  });
+
   it('turns Plan and payments into Renew plan, with its target, while the server flags the plan', async () => {
     const { host, harness } = await render({
       enrollments: [plan({ lastActiveDate: '2026-09-29', endDateExclusive: '2026-09-30' })],

@@ -4,6 +4,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { of, Subject, throwError, type Observable } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiClient } from '../../core/api/api-client';
+import type { ClientSelfProfile } from '../../core/api/api.models';
 import type { HouseProgramsView, StrengthMaxView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -29,6 +31,7 @@ import {
   typedMaxView,
   underPass,
 } from '../../../testing/house-program-fixtures';
+import { finishedProfile } from '../../../testing/intake-fixtures';
 import { HousePlansApi } from '../account/house-plans-api';
 import { toHousePlans, type HousePlans } from '../account/house-plans.models';
 import { HousePrograms } from './house-programs';
@@ -45,6 +48,8 @@ type Answer<T> = () => Observable<T>;
 interface Answers {
   readonly programs?: Answer<HouseProgramsRead>;
   readonly plans?: Answer<HousePlans>;
+  /** The trainee's own profile: a trainee of the house on Free unless told (N9c5b). */
+  readonly self?: Answer<ClientSelfProfile>;
   readonly start?: (listingId: string, request: unknown) => Observable<HouseProgramStarted>;
   readonly recordMax?: (request: unknown) => Observable<StrengthMaxView>;
 }
@@ -76,6 +81,9 @@ async function render(answers: Answers = {}) {
     ask: vi.fn(),
     moneySent: vi.fn(),
   };
+  const profiles = {
+    getSelfProfile: vi.fn(answers.self ?? (() => of(finishedProfile({ selfDirected: true })))),
+  };
   const csrf = {
     refresh: vi.fn(() => {
       calls.push('csrf');
@@ -89,6 +97,7 @@ async function render(answers: Answers = {}) {
       provideRouter([]),
       { provide: HouseProgramsApi, useValue: api },
       { provide: HousePlansApi, useValue: housePlans },
+      { provide: ApiClient, useValue: profiles },
       { provide: CsrfService, useValue: csrf },
       { provide: UiToast, useValue: toast },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-house') } },
@@ -103,6 +112,7 @@ async function render(answers: Answers = {}) {
     host,
     api,
     housePlans,
+    profiles,
     csrf,
     calls,
     toast,
@@ -158,7 +168,7 @@ describe('HousePrograms', () => {
     });
 
     it('says the programs aren’t open outside the house, with the way back to Training', async () => {
-      const { host, housePlans } = await render({ programs: refuse(404) });
+      const { host, housePlans, profiles } = await render({ programs: refuse(404) });
 
       const gone = host.querySelector('[data-programs-gone]')!;
       expect(textOf(gone)).toContain('Programs aren’t open here');
@@ -167,6 +177,7 @@ describe('HousePrograms', () => {
       );
       expect(gone.querySelector('a')!.getAttribute('href')).toBe('/training/program');
       expect(housePlans.plans).not.toHaveBeenCalled();
+      expect(profiles.getSelfProfile).not.toHaveBeenCalled();
     });
 
     it('says Training is closed, for a 403 or when the server refuses every program for it', async () => {
@@ -191,6 +202,7 @@ describe('HousePrograms', () => {
       );
       expect(closed.host.querySelector('[data-program]')).toBeNull();
       expect(closed.housePlans.plans).not.toHaveBeenCalled();
+      expect(closed.profiles.getSelfProfile).not.toHaveBeenCalled();
     });
 
     it('says when TB Gym offers no program yet', async () => {
@@ -202,7 +214,7 @@ describe('HousePrograms', () => {
 
   describe('on Free', () => {
     it('says Pro+ is needed and offers to ask for it on My plan while Pro+ is on sale', async () => {
-      const { host, housePlans } = await render();
+      const { host, housePlans, profiles } = await render();
 
       const pass = host.querySelector('[data-pass]')!;
       expect(textOf(pass.querySelector('.pass-title'))).toBe(
@@ -212,6 +224,9 @@ describe('HousePrograms', () => {
       expect(textOf(ask)).toBe('Ask for Pro+');
       expect(ask.getAttribute('href')).toBe('/plan');
       expect(housePlans.plans).toHaveBeenCalledTimes(1);
+      // Read beside the plans: Max does not coach this trainee, so Free's words stand (N9c5b).
+      expect(profiles.getSelfProfile).toHaveBeenCalledTimes(1);
+      expect(pass.querySelector('[data-max-coach]')).toBeNull();
     });
 
     it('lists each program with whom it suits, its block, its weeks and its week 1, and nothing to start', async () => {
@@ -292,9 +307,117 @@ describe('HousePrograms', () => {
     });
   });
 
+  describe('on Max (notes plan N9c5b)', () => {
+    /** A trainee of the house whom Max coaches today. */
+    const onMax = () => () => of(finishedProfile({ selfDirected: true, coachedByTheHouse: true }));
+    const MAX_WORDS = 'You’re on Max, so your coach picks your program and puts it on Training.';
+
+    it('says their coach picks their program, with the way to Training, and offers no Pro+', async () => {
+      const { host, housePlans, profiles } = await render({ self: onMax() });
+
+      const pass = host.querySelector('[data-pass]')!;
+      expect(pass.getAttribute('aria-label')).toBe('Your plan');
+      const title = pass.querySelector('.pass-title')!;
+      expect(title.hasAttribute('data-max-coach')).toBe(true);
+      expect(textOf(title)).toBe(MAX_WORDS);
+      const open = pass.querySelector<HTMLAnchorElement>('[data-open-training]')!;
+      expect(textOf(open)).toBe('Open Training');
+      expect(open.getAttribute('href')).toBe('/training/program');
+      expect(textOf(pass)).toBe(`${MAX_WORDS} Open Training`);
+      // Nothing to ask for and no line of Free's; the tab bar, not this page, leads to Messages.
+      expect(pass.querySelector('[data-ask-pro], [data-asked], [data-asks-off]')).toBeNull();
+      expect(textOf(host)).not.toContain('Free keeps running');
+      expect(textOf(host)).not.toContain('Ask for Pro+');
+      expect(host.querySelector('a[href="/plan"], a[href="/messages"]')).toBeNull();
+      expect(host.querySelector('[data-start-program], [data-type-maxes]')).toBeNull();
+      expect(host.querySelectorAll('[data-program]')).toHaveLength(3);
+      expect(profiles.getSelfProfile).toHaveBeenCalledTimes(1);
+      expect(housePlans.plans).toHaveBeenCalledTimes(1);
+    });
+
+    it('names the program their coach put on Training, and the day it runs until', async () => {
+      const { host } = await render({
+        self: onMax(),
+        programs: read(housePrograms({ running: runningBlock() })),
+      });
+
+      const pass = host.querySelector('[data-pass]')!;
+      expect(textOf(pass.querySelector('[data-max-coach]'))).toBe(MAX_WORDS);
+      expect(textOf(pass.querySelector('[data-running]'))).toBe(
+        'Strength Base 1 runs until Fri 27 Nov.',
+      );
+      expect(pass.querySelector('[data-running] bdi')?.getAttribute('dir')).toBe('auto');
+      expect(pass.querySelector('[data-open-training]')).not.toBeNull();
+      expect(pass.querySelector('[data-running-stranded]')).toBeNull();
+      expect(textOf(pass)).not.toContain('Pro+');
+    });
+
+    it('reads the profile beside the plans, and draws the card once both have answered', async () => {
+      const self = new Subject<ClientSelfProfile>();
+      const plans = new Subject<HousePlans>();
+      const { host, housePlans, profiles, settle } = await render({
+        self: () => self,
+        plans: () => plans,
+      });
+
+      // Both asked at once, before either answers: Free waits for no second round trip.
+      expect(profiles.getSelfProfile).toHaveBeenCalledTimes(1);
+      expect(housePlans.plans).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('[data-pass]')).toBeNull();
+      expect(host.querySelector('app-skeleton')).not.toBeNull();
+
+      plans.next(toHousePlans(housePlansView()));
+      plans.complete();
+      await settle();
+      // Ask for Pro+ never shows first, to be taken away once the profile says Max.
+      expect(host.querySelector('[data-pass]')).toBeNull();
+      expect(host.querySelector('[data-ask-pro]')).toBeNull();
+
+      self.next(finishedProfile({ selfDirected: true, coachedByTheHouse: true }));
+      self.complete();
+      await settle();
+      expect(textOf(host.querySelector('[data-max-coach]'))).toBe(MAX_WORDS);
+      expect(host.querySelector('[data-ask-pro]')).toBeNull();
+    });
+
+    it('keeps the Pro+ card under a running Pro+ pass, and reads neither the profile nor the plans', async () => {
+      const { host, housePlans, profiles } = await render({
+        self: onMax(),
+        programs: read(underPass({ running: runningBlock() })),
+      });
+
+      const pass = host.querySelector('[data-pass]')!;
+      expect(textOf(pass.querySelector('.pass-title'))).toBe('Pro+ until Fri 11 Dec');
+      expect(pass.querySelector('[data-max-coach]')).toBeNull();
+      expect(textOf(card(host, BASE_1_LISTING).querySelector('[data-start-program]'))).toBe(
+        'Start Strength Base 1',
+      );
+      expect(profiles.getSelfProfile).not.toHaveBeenCalled();
+      expect(housePlans.plans).not.toHaveBeenCalled();
+    });
+
+    it('keeps Free’s words when the profile can’t be read', async () => {
+      const { host } = await render({ self: refuse(500) });
+
+      const pass = host.querySelector('[data-pass]')!;
+      expect(textOf(pass.querySelector('.pass-title'))).toBe(
+        'Starting a program needs Pro+. Free keeps running, with everything you logged.',
+      );
+      expect(pass.querySelector('[data-ask-pro]')).not.toBeNull();
+      expect(pass.querySelector('[data-max-coach]')).toBeNull();
+      expect(host.querySelectorAll('[data-program]')).toHaveLength(3);
+    });
+
+    it('keeps Max’s words when what TB Gym sells can’t be read', async () => {
+      const { host } = await render({ self: onMax(), plans: refuse(500) });
+
+      expect(textOf(host.querySelector('[data-pass]'))).toBe(`${MAX_WORDS} Open Training`);
+    });
+  });
+
   describe('under a pass', () => {
     it('names the pass and the program running, and never reads what TB Gym sells', async () => {
-      const { host, housePlans } = await render({
+      const { host, housePlans, profiles } = await render({
         programs: read(underPass({ running: runningBlock() })),
       });
 
@@ -306,6 +429,7 @@ describe('HousePrograms', () => {
       expect(open.getAttribute('href')).toBe('/training/program');
       expect(host.querySelector('[data-running-stranded]')).toBeNull();
       expect(housePlans.plans).not.toHaveBeenCalled();
+      expect(profiles.getSelfProfile).not.toHaveBeenCalled();
     });
 
     it('never says “runs until” for a program whose plan ended with a workout of it open', async () => {
@@ -691,6 +815,31 @@ describe('HousePrograms', () => {
       expect(pass.querySelector('[data-ask-pro]')).not.toBeNull();
       expect(housePlans.plans).toHaveBeenCalledTimes(1);
       expect(host.querySelector('[data-start-program], [data-start-problem]')).toBeNull();
+    });
+
+    it('reads the list again when the pass isn’t running now, and shows Max to a trainee Max coaches', async () => {
+      const programs = vi
+        .fn<Answer<HouseProgramsRead>>()
+        .mockReturnValueOnce(of(toHousePrograms(underPass())))
+        .mockReturnValue(of(toHousePrograms(housePrograms())));
+      const { host, profiles, settle } = await render({
+        programs,
+        self: () => of(finishedProfile({ selfDirected: true, coachedByTheHouse: true })),
+        start: conflict('house_program_needs_pass'),
+      });
+      expect(profiles.getSelfProfile).not.toHaveBeenCalled();
+
+      await startBlock1(host, settle);
+
+      expect(profiles.getSelfProfile).toHaveBeenCalledTimes(1);
+      const pass = host.querySelector('[data-pass]')!;
+      expect(textOf(pass.querySelector('.pass-title'))).toBe(
+        'You’re on Max, so your coach picks your program and puts it on Training.',
+      );
+      expect(pass.querySelector('[data-ask-pro]')).toBeNull();
+      expect(textOf(host.querySelector('[data-notice]'))).toBe(
+        'Your Pro+ pass isn’t running now, so this program couldn’t start.',
+      );
     });
 
     it('reads the list again when Training closed meanwhile, and shows the page closed', async () => {

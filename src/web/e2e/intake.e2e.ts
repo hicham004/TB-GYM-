@@ -49,6 +49,26 @@ interface Writes {
   completed: Record<string, unknown>[];
 }
 
+const HEALTH = ['allergies', 'medications', 'previousInjuries'] as const;
+
+/** The server's refusal of a health answer while the Health step is closed (N9c5a): `{ code, message }`. */
+const HEALTH_CLOSED = {
+  code: 'health_step_closed',
+  message: "Health answers open on Max, TB Gym's coaching. Your other answers can still be saved.",
+};
+
+/**
+ * Whether the server would refuse an intake while the Health step is closed (CLI-028): a health answer
+ * that is there and differs from the one held. One kept as it is passes.
+ */
+function refusesHealth(profile: ClientSelfProfile, body: Record<string, unknown>): boolean {
+  if (profile.healthStepOpen !== false) return false;
+  return HEALTH.some((field) => {
+    const sent = typeof body[field] === 'string' ? (body[field] as string).trim() : null;
+    return sent !== null && sent !== '' && sent !== profile[field];
+  });
+}
+
 /** What the server would hold after an intake request: the answers it carries, one version on. */
 function applyIntake<T extends ClientSelfProfile>(profile: T, body: Record<string, unknown>): T {
   const heightValue = body['heightValue'] as number | null;
@@ -85,6 +105,8 @@ async function openMyProfile(
     dark?: boolean;
     height?: number;
     refuseSaves?: boolean;
+    /** Max ends just before the first save lands, so the Health step closes under the person (N9c5a). */
+    maxEndsOnSave?: boolean;
     extra?: Record<string, Handler>;
   } = {},
 ) {
@@ -92,6 +114,7 @@ async function openMyProfile(
   await page.emulateMedia({ colorScheme: options.dark ? 'dark' : 'light' });
   await page.setViewportSize({ width, height: options.height ?? 900 });
   let profile = options.profile ?? newProfile();
+  let maxEnds = options.maxEndsOnSave === true;
   const writes: Writes = { saved: [], completed: [] };
   await mockSession(page, {
     memberships: [ATLAS_CLIENT],
@@ -114,12 +137,18 @@ async function openMyProfile(
             title: 'Your profile was changed elsewhere. Reload it and try again.',
           });
         }
+        if (maxEnds) {
+          maxEnds = false;
+          profile = { ...profile, healthStepOpen: false };
+        }
+        if (refusesHealth(profile, body)) return json(route, 409, HEALTH_CLOSED);
         profile = applyIntake(profile, body);
         return json(route, 200, profile);
       },
       'POST /api/client-profile/me/complete-onboarding': (route) => {
         const body = route.request().postDataJSON() as { intake: Record<string, unknown> };
         writes.completed.push(body);
+        if (refusesHealth(profile, body.intake)) return json(route, 409, HEALTH_CLOSED);
         profile = { ...applyIntake(profile, body.intake), onboardingStatus: 'Completed' };
         return json(route, 200, profile);
       },
@@ -409,6 +438,260 @@ test('right to left: the steps keep their order and nothing overflows', async ({
   await page.screenshot({ path: 'test-results/r53b-step-rtl-390.png', fullPage: true });
 });
 
+// ---------- a trainee of TB Gym's own space: the Health step follows Max (N9c5a) ----------
+
+/** A Free trainee: TB Gym's own space, off Max, so the Health step is closed. */
+const OFF_MAX = { selfDirected: true, coachedByTheHouse: false, healthStepOpen: false } as const;
+/** A Max trainee: TB Gym coaches them, so the Health step is open. */
+const ON_MAX = { selfDirected: true, coachedByTheHouse: true, healthStepOpen: true } as const;
+const CLOSED_NOTE = 'Health answers open on Max, TB Gym’s coaching, so these can’t be changed now.';
+const CLOSED_REFUSAL =
+  'Health answers open on Max, TB Gym’s coaching. Your other answers can still be saved.';
+
+/** The progress list's last bar ends where the list does: no column is left empty. */
+async function expectProgressFilled(page: Page) {
+  const list = (await page.locator('.progress').boundingBox())!;
+  const last = (await page.locator('.progress .item').last().boundingBox())!;
+  expect(Math.abs(last.x + last.width - (list.x + list.width))).toBeLessThan(1);
+}
+
+test('a Free trainee answers four steps, without Health, and every save sends the held health answers back as they are', async ({
+  page,
+}) => {
+  // An answer given while on Max earlier stays as it is: never emptied, never changed.
+  const writes = await openMyProfile(page, 390, {
+    profile: newProfile({ ...OFF_MAX, medications: 'Ventolin' }),
+  });
+
+  await expect(page.locator('.kicker')).toHaveText('Step 1 of 4');
+  await expect(page).toHaveTitle(/^About you \(step 1 of 4\)/);
+  await expect(page.locator('.progress .item')).toHaveCount(4);
+  await expectProgressFilled(page);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/n9c5b-free-step-about-390.png', fullPage: true });
+
+  await typeBirthDate(page, '2', '4', '1996');
+  await page.getByLabel('Height', { exact: true }).fill('168');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await stepHeading(page, 'Your goal');
+  await expect(page.locator('.kicker')).toHaveText('Step 2 of 4');
+  await page.getByLabel('Goals').fill('Squat my bodyweight.');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await stepHeading(page, 'Your day and food');
+  await expect(page.locator('.kicker')).toHaveText('Step 3 of 4');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await stepHeading(page, 'Where you start');
+  await expect(page.locator('.kicker')).toHaveText('Step 4 of 4');
+  await expect(page.locator('.privacy')).toHaveCount(0);
+  await page.getByLabel('Weight', { exact: true }).fill('62.5');
+  await axe(page);
+  await page.getByRole('button', { name: 'Finish setting up' }).click();
+  await expect(page.getByRole('heading', { name: 'You’re all set, Rana' })).toBeVisible();
+
+  const held = { allergies: null, medications: 'Ventolin', previousInjuries: null };
+  expect(writes.saved).toHaveLength(3);
+  for (const body of writes.saved) expect(body).toMatchObject(held);
+  expect(writes.completed).toEqual([
+    expect.objectContaining({ intake: expect.objectContaining(held) }),
+  ]);
+
+  // The answer held is still read, on its own card, with no Edit.
+  await page.getByRole('button', { name: 'See my answers' }).click();
+  await expect(page.locator('.panel-head h2')).toHaveText([
+    'About you',
+    'Your goal',
+    'Your day and food',
+    'Your health',
+  ]);
+  await expect(page.locator('[data-health-closed]')).toHaveText(CLOSED_NOTE);
+  await expect(page.getByRole('button', { name: 'Edit Your health' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(3);
+});
+
+test('a Free trainee’s four steps follow dark mode, reflow at 200% text and read right to left', async ({
+  page,
+}) => {
+  await openMyProfile(page, 390, { profile: halfwayProfile(OFF_MAX), dark: true });
+
+  await expect(page.locator('.kicker')).toHaveText('Step 3 of 4');
+  await expect(page.locator('.progress .item.done')).toHaveCount(2);
+  await expectProgressFilled(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/n9c5b-free-step-dark-390.png', fullPage: true });
+
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: 'test-results/n9c5b-free-step-200-390.png', fullPage: true });
+
+  await useRtl(page);
+  await expectNoHorizontalOverflow(page);
+});
+
+test('a Max trainee has all five steps, Health among them, and gives health answers there', async ({
+  page,
+}) => {
+  const writes = await openMyProfile(page, 390, {
+    profile: halfwayProfile({ ...ON_MAX, workType: 'Teacher' }),
+  });
+
+  await expect(page.locator('.progress .name')).toHaveText([
+    'About you, done',
+    'Goal, done',
+    'Day and food, done',
+    'Health',
+    'Weight',
+  ]);
+  await expectProgressFilled(page);
+  await stepHeading(page, 'Your health');
+  await expect(page.locator('.kicker')).toHaveText('Step 4 of 5');
+  await expect(page.locator('.privacy')).toHaveText(
+    'Only you and your coach can see these answers.',
+  );
+  await page.getByLabel('Allergies (optional)').fill('Shellfish');
+  await axe(page);
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await stepHeading(page, 'Where you start');
+  await expect(page.locator('.kicker')).toHaveText('Step 5 of 5');
+  expect(writes.saved).toEqual([expect.objectContaining({ allergies: 'Shellfish' })]);
+});
+
+for (const width of [390, 1440]) {
+  test(`a Free trainee’s finished profile at ${width}px reads the held health answers with no Edit, light and dark, at 200% text`, async ({
+    page,
+  }) => {
+    await openMyProfile(page, width, { profile: finishedProfile(OFF_MAX) });
+
+    await expect(page.locator('.panel-head h2')).toHaveText([
+      'About you',
+      'Your goal',
+      'Your day and food',
+      'Your health',
+    ]);
+    const health = page.locator('section.panel', { has: page.locator('#intake-health') });
+    await expect(health.locator('[data-health-closed]')).toHaveText(CLOSED_NOTE);
+    await expect(health).toContainText('Peanuts');
+    await expect(health.getByRole('button')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(3);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n9c5b-free-profile-${width}.png`, fullPage: true });
+
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.reload();
+    await expect(page.locator('[data-health-closed]')).toHaveText(CLOSED_NOTE);
+    await axe(page);
+    await page.screenshot({
+      path: `test-results/n9c5b-free-profile-dark-${width}.png`,
+      fullPage: true,
+    });
+
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({
+      path: `test-results/n9c5b-free-profile-200-${width}.png`,
+      fullPage: true,
+    });
+  });
+}
+
+test('a Free trainee with no health answers held has no Health card at all', async ({ page }) => {
+  await openMyProfile(page, 390, {
+    profile: finishedProfile({
+      ...OFF_MAX,
+      allergies: null,
+      medications: null,
+      previousInjuries: null,
+    }),
+  });
+
+  await expect(page.locator('.panel-head h2')).toHaveText([
+    'About you',
+    'Your goal',
+    'Your day and food',
+  ]);
+  await expect(page.locator('[data-health-closed]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(3);
+  await axe(page);
+});
+
+test.describe('when Max ends under the Health step', () => {
+  // The browser logs the refused request itself; what matters is what the page says and does.
+  test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/client-profile/] } });
+
+  test('the first run says why on Weight, the step is gone, and leaving asks nothing', async ({
+    page,
+  }) => {
+    const writes = await openMyProfile(page, 390, {
+      profile: halfwayProfile({ ...ON_MAX, workType: 'Teacher' }),
+      maxEndsOnSave: true,
+    });
+
+    await stepHeading(page, 'Your health');
+    await page.getByLabel('Allergies (optional)').fill('Shellfish');
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    const refusal = page.locator('app-form-summary');
+    await expect(refusal).toHaveText(CLOSED_REFUSAL);
+    await expect(refusal).toBeFocused();
+    await stepHeading(page, 'Where you start');
+    await expect(page.locator('.kicker')).toHaveText('Step 4 of 4');
+    await expect(page.locator('.progress .item')).toHaveCount(4);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: 'test-results/n9c5b-health-closed-step-390.png' });
+
+    // Nothing typed on the closed step can be saved, so the leave warning stays off.
+    await page.getByRole('link', { name: 'Me', exact: true }).first().click();
+    await expect(page).toHaveURL(/\/me$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(writes.saved).toEqual([expect.objectContaining({ allergies: 'Shellfish' })]);
+  });
+
+  test('the health sheet keeps the words, sends nothing more, and its Edit is gone', async ({
+    page,
+  }) => {
+    const writes = await openMyProfile(page, 390, {
+      profile: finishedProfile(ON_MAX),
+      maxEndsOnSave: true,
+    });
+
+    await page.getByRole('button', { name: 'Edit Your health' }).click();
+    const sheet = page.getByRole('dialog');
+    await sheet.getByLabel('Allergies (optional)').fill('Shellfish');
+    await sheet.getByRole('button', { name: 'Save changes' }).click();
+
+    await expect(sheet.locator('app-form-summary')).toHaveText(CLOSED_REFUSAL);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: 'test-results/n9c5b-health-closed-sheet-390.png' });
+    // The read already says so: pressing again sends nothing, waited for rather than assumed.
+    const another = page
+      .waitForRequest(
+        (request) =>
+          request.method() === 'PUT' && request.url().endsWith('/api/client-profile/me/intake'),
+        { timeout: 1000 },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+    await sheet.getByRole('button', { name: 'Save changes' }).click();
+    expect(await another).toBe(false);
+    await expect(sheet.locator('app-form-summary')).toHaveText(CLOSED_REFUSAL);
+    expect(writes.saved).toHaveLength(1);
+
+    // Nothing in it can be saved, so Not now closes it without asking.
+    await sheet.getByRole('button', { name: 'Not now' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('[data-health-closed]')).toHaveText(CLOSED_NOTE);
+    await expect(page.getByRole('button', { name: 'Edit Your health' })).toHaveCount(0);
+    await expect(page.locator('.answer', { hasText: 'Allergies' })).toContainText('Peanuts');
+  });
+});
+
 // ---------- the coach's view ----------
 
 const CLIENT_ID = 'client-1';
@@ -417,12 +700,19 @@ const OWNER = { ...SIGNED_IN_USER, id: COACH_USER_ID, displayName: 'Karim Haddad
 
 async function openClientIntake(
   page: Page,
-  options: { details?: CoachClientDetails; dark?: boolean; width?: number } = {},
+  options: {
+    details?: CoachClientDetails;
+    dark?: boolean;
+    width?: number;
+    /** The client's Max ends just before the first save lands (N9c5a). */
+    maxEndsOnSave?: boolean;
+  } = {},
 ) {
   await page.clock.setFixedTime(new Date(NOW));
   await page.emulateMedia({ colorScheme: options.dark ? 'dark' : 'light' });
   await page.setViewportSize({ width: options.width ?? 1440, height: 900 });
   let details = options.details ?? coachView();
+  let maxEnds = options.maxEndsOnSave === true;
   const writes: Writes = { saved: [], completed: [] };
   await mockSession(page, {
     memberships: [OWNER_MEMBERSHIP],
@@ -442,6 +732,11 @@ async function openClientIntake(
       [`PUT /api/clients/${CLIENT_ID}/intake`]: (route) => {
         const body = route.request().postDataJSON() as Record<string, unknown>;
         writes.saved.push(body);
+        if (maxEnds) {
+          maxEnds = false;
+          details = { ...details, healthStepOpen: false };
+        }
+        if (refusesHealth(details, body)) return json(route, 409, HEALTH_CLOSED);
         details = applyIntake(details, body);
         return json(route, 200, details);
       },
@@ -608,4 +903,91 @@ test('the owner on another coach’s client is told why the intake is closed, wi
   await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(0);
   expect(writes).toEqual([]);
   await axe(page);
+});
+
+// ---------- the coach's view of a trainee of TB Gym's own space (N9c5a) ----------
+
+test('the coach reads a Free trainee’s held health answers with no Edit on them, light and dark', async ({
+  page,
+}) => {
+  await openClientIntake(page, {
+    details: { ...coachView(finishedProfile()), healthStepOpen: false },
+  });
+
+  await expect(page.locator('.panel-head h2')).toHaveText([
+    'About Rana',
+    'Rana’s goal',
+    'Rana’s day and food',
+    'Rana’s health',
+  ]);
+  await expect(page.locator('[data-health-closed]')).toHaveText(CLOSED_NOTE);
+  await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Edit Rana’s health' })).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/n9c5b-coach-free-intake-1440.png', fullPage: true });
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.reload();
+  await expect(page.locator('[data-health-closed]')).toHaveText(CLOSED_NOTE);
+  await axe(page);
+});
+
+test('the coach of a Free trainee with no health answers held sees no Health card', async ({
+  page,
+}) => {
+  await openClientIntake(page, {
+    details: {
+      ...coachView(finishedProfile({ allergies: null, medications: null, previousInjuries: null })),
+      healthStepOpen: false,
+    },
+    width: 390,
+  });
+
+  await expect(page.locator('.panel-head h2')).toHaveText([
+    'About Rana',
+    'Rana’s goal',
+    'Rana’s day and food',
+  ]);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+});
+
+test.describe('when a client’s Max ends under the coach’s health sheet', () => {
+  test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/clients\//] } });
+
+  test('the sheet says why in the client’s name, sends nothing more, and the Edit is gone', async ({
+    page,
+  }) => {
+    const writes = await openClientIntake(page, { maxEndsOnSave: true });
+
+    await page.getByRole('button', { name: 'Edit Rana’s health' }).click();
+    const sheet = page.getByRole('dialog');
+    await sheet.getByLabel('Allergies (optional)').fill('Shellfish');
+    await sheet.getByRole('button', { name: 'Save changes' }).click();
+
+    await expect(sheet.locator('app-form-summary')).toHaveText(
+      'Health answers open on Max, TB Gym’s coaching. Rana’s other answers can still be saved.',
+    );
+    await axe(page);
+    // The read already says so: pressing again sends nothing, waited for rather than assumed.
+    const another = page
+      .waitForRequest(
+        (request) =>
+          request.method() === 'PUT' && request.url().endsWith(`/api/clients/${CLIENT_ID}/intake`),
+        { timeout: 1000 },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+    await sheet.getByRole('button', { name: 'Save changes' }).click();
+    expect(await another).toBe(false);
+    expect(writes.saved).toHaveLength(1);
+    await sheet.getByRole('button', { name: 'Not now' }).click();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('[data-health-closed]')).toHaveText(CLOSED_NOTE);
+    await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(3);
+  });
 });

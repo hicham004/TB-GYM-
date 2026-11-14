@@ -69,6 +69,26 @@
                 >Open Training</a
               >
             }
+          } @else if (max(); as coached) {
+            <!-- Max coaches them (N9c5b): their coach picks the program, so nothing is offered here. -->
+            <p class="pass-title" data-max-coach i18n>
+              You’re on Max, so your coach picks your program and puts it on Training.
+            </p>
+            @if (coached.running; as running) {
+              @if (running.stranded) {
+                <p data-running-stranded i18n>
+                  <bdi dir="auto">{{ running.name }}</bdi
+                  >’s plan has ended, and a workout you started in it is still open.
+                </p>
+              } @else {
+                <p data-running i18n>
+                  <bdi dir="auto">{{ running.name }}</bdi> runs until {{ running.until }}.
+                </p>
+              }
+            }
+            <a class="text-link" routerLink="/training/program" data-open-training i18n
+              >Open Training</a
+            >
           } @else {
             <p class="pass-title" i18n>
               Starting a program needs Pro+. Free keeps running, with everything you logged.

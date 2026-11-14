@@ -37,6 +37,8 @@ import { UiDialog } from '../../ui/dialog';
 import { UiSheet } from '../../ui/sheet';
 import { ClientActions } from './client-actions';
 import {
+  freeAloneLine,
+  onFreeAlone,
   planChoices,
   planPaid,
   programWriteError,
@@ -181,6 +183,10 @@ export class ClientProgram {
   protected readonly shareText = computed(() => $localize`Shared with ${this.firstName()}:name:`);
   protected readonly emptyDescription = computed(() => {
     const name = this.firstName();
+    // Free covers a trainee's own workouts, never a program (N9c5a): nothing to assign until a plan is.
+    if (!this.canAssign() && onFreeAlone(this.context.plans()?.enrollments ?? [])) {
+      return freeAloneLine(name);
+    }
     const starts = this.bookedStart();
     return starts
       ? $localize`${name}:name:’s plan starts ${starts}:date:. Assign a program now and ${name}:name: sees it from that day.`

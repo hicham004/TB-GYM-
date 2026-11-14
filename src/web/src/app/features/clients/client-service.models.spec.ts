@@ -5,12 +5,14 @@ import {
   catalog,
   catalogWithPacks,
   enrollment,
+  houseProPlan,
   payment,
   SERVICE_TODAY,
   sessionPack,
   unpaidPack,
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
+import { houseMaxPlan } from '../../../testing/max-staff-fixtures';
 import {
   accessSummary,
   defaultPlanStart,
@@ -231,6 +233,32 @@ describe('what needs the coach', () => {
       disabled: true,
       hint: 'None of this plan’s price options is offered now',
     });
+  });
+
+  it('never offers to renew Max, which is booked from the trainee’s ask alone (N9c5a)', () => {
+    const hint = 'Max is booked from the trainee’s ask, so its places are kept.';
+    // Ending soon, over with nothing after it, or asked for: never the filled Renew plan.
+    const ending = houseMaxPlan({ lastActiveDate: '2026-10-12', endDateExclusive: '2026-10-13' });
+    expect(planCard(ending, context).tier).toBe('Max');
+    expect(primaryAction(planCard(ending, context), [ending], context, false)).toBeNull();
+    expect(primaryAction(planCard(ending, context), [ending], context, true)).toBeNull();
+    const over = { ...context, today: '2026-11-02' };
+    expect(primaryAction(planCard(ending, over), [ending], over, false)).toBeNull();
+
+    // In Manage plan it stays, closed, with the server's reason, whether or not its option is on sale.
+    for (const renewable of [true, false]) {
+      const items = planMenu(planCard(ending, context), null, renewable);
+      expect(items.find((item) => item.label === 'Renew plan')).toEqual({
+        label: 'Renew plan',
+        hint,
+        action: 'renew',
+        disabled: true,
+      });
+    }
+    // Any other plan of the house's, and a coach's own, renews as before.
+    expect(planCard(enrollment(), context).tier).toBeNull();
+    const pro = houseProPlan({ lastActiveDate: '2026-10-12', endDateExclusive: '2026-10-13' });
+    expect(primaryAction(planCard(pro, context), [pro], context, false)?.id).toBe('renew');
   });
 
   it('resumes a paused plan instead of pausing it again', () => {

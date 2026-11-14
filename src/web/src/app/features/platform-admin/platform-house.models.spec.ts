@@ -134,6 +134,41 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
       });
     });
 
+    it('keeps Max’s places last, in the server’s order, now that the page has words for it (N9c5b)', () => {
+      const house = houseWithEverySetting();
+      const read = toHouseAdmin({
+        ...house,
+        settings: [
+          ...house.settings,
+          {
+            ...house.settings[0],
+            setting: 'MaxPlaces',
+            value: null,
+            version: 0,
+            changedAtUtc: null,
+            changedByUserId: null,
+            changedByName: null,
+          },
+        ],
+      });
+
+      expect(read.settings.map((row) => row.setting)).toEqual([
+        'SignUpsPerWeek',
+        'MinimumSignUpAge',
+        'FreeProgressDays',
+        'MediaStorageGigabytes',
+        'WhishNumber',
+        'MaxPlaces',
+      ]);
+      expect(read.settings[5]).toEqual({
+        setting: 'MaxPlaces',
+        value: null,
+        version: 0,
+        changedAtUtc: null,
+        changedByName: null,
+      });
+    });
+
     it('has no house, no settings and no sign-up while no space is marked', () => {
       expect(toHouseAdmin(noHouse())).toEqual({ house: null, settings: [], signUp: null });
     });
@@ -145,6 +180,7 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
 
       expect(Object.keys(words).sort()).toEqual([
         'FreeProgressDays',
+        'MaxPlaces',
         'MediaStorageGigabytes',
         'MinimumSignUpAge',
         'SignUpsPerWeek',
@@ -201,6 +237,18 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
           'Enter 6 to 20 digits, with a + in front if you like and spaces between groups, or leave it empty.',
         maxLength: 40,
       });
+      // Notes plan N9c5b: Max's places, never called "places" in its name, which the sign-up card uses.
+      expect(words.MaxPlaces).toEqual({
+        kind: 'number',
+        label: 'Trainees on Max at a time',
+        inSentence: 'the number of trainees on Max at a time',
+        help: 'A whole number from 0 to 1,000. Empty or 0 keeps Max closed. A booked Max plan keeps its place until it ends.',
+        reason: 'Enter a whole number from 0 to 1,000, or leave it empty.',
+        min: 0,
+        max: 1_000,
+        unit: 'count',
+      });
+      expect(words.MaxPlaces.label).not.toMatch(/place/i);
     });
 
     it('keeps a number setting’s bounds and unit, and a text setting’s longest form, by its kind', () => {
@@ -214,6 +262,7 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
         [1, 3_650, 'days'],
         [1, 10_240, 'gigabytes'],
         [40],
+        [0, 1_000, 'count'],
       ]);
     });
 
@@ -243,6 +292,16 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
       expect(settingValueText(null, LOCALE, days)).toBe('Empty');
       expect(settingValueText('', LOCALE, storage)).toBe('Empty');
       expect(settingValueText('23', LOCALE, count)).toBe('23');
+    });
+
+    it('shows Max’s places as a plain count, and an empty one as Empty (N9c5b)', () => {
+      const max = houseSettingWords().MaxPlaces;
+
+      expect(settingValueText('0', LOCALE, max)).toBe('0');
+      expect(settingValueText('6', LOCALE, max)).toBe('6');
+      expect(settingValueText('1000', LOCALE, max)).toBe('1,000');
+      expect(settingValueText(null, LOCALE, max)).toBe('Empty');
+      expect(settingValueText('', LOCALE, max)).toBe('Empty');
     });
 
     it('shows the Whish number exactly as the server keeps it, never as a number (N9c2)', () => {

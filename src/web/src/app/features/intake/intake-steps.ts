@@ -27,16 +27,20 @@ import {
   followSaved,
   groupTitle,
   hasChanges,
+  healthOpen,
   healthPrivacy,
-  INTAKE_STEPS,
+  intakeSteps,
   isStepDone,
   mergeSteps,
   stepErrors,
   stepLede,
+  stepAfter,
   stepName,
+  stepShown,
   toCompleteRequest,
   toUpdateRequest,
   valuesFromProfile,
+  withSavedHealth,
   type IntakeSaver,
   type IntakeStepId,
   type IntakeValues,
@@ -44,7 +48,9 @@ import {
 
 /**
  * A new client's first questions as five short steps (R5.3b) instead of one long form: who they are,
- * what they want, how they live and eat, their health, and the weight they start from. Each Continue
+ * what they want, how they live and eat, their health, and the weight they start from; four, without
+ * health, while the profile's Health step is closed (a trainee of TB Gym's own space off Max, N9c5a),
+ * the saved health answers then going back as they are. Each Continue
  * saves that step's answers (so closing the tab loses nothing already passed) and moves on; a person
  * who left half way starts at the first step the saved profile does not finish. The last step finishes
  * setting up. The server stays the authority: this asks, checks the same limits in words, and shows the
@@ -84,7 +90,6 @@ export class IntakeSteps {
   protected readonly attempt = new FormAttempt();
   protected readonly busy = signal(false);
   protected readonly refusal = signal<string | null>(null);
-  protected readonly stepIds = INTAKE_STEPS;
   protected readonly progressLabel = $localize`Steps`;
 
   private readonly saved = computed(() =>
@@ -97,21 +102,29 @@ export class IntakeSteps {
       previous ? followSaved(previous.value, previous.source, saved) : saved,
   });
 
+  /** The steps this person has: Health only while the profile's step is open. */
+  private readonly steps = computed(() => intakeSteps(healthOpen(this.profile())));
   private readonly chosen = signal<IntakeStepId | null>(null);
   private readonly passed = signal<ReadonlySet<IntakeStepId>>(new Set());
-  protected readonly step = computed(() => this.chosen() ?? firstOpenStep(this.profile()));
-  protected readonly index = computed(() => INTAKE_STEPS.indexOf(this.step()));
-  protected readonly isLast = computed(() => this.index() === INTAKE_STEPS.length - 1);
+  /** A chosen step that has gone (Health closed under the person) gives way to the next one there. */
+  protected readonly step = computed(() => {
+    const chosen = this.chosen();
+    return chosen === null
+      ? firstOpenStep(this.profile(), this.steps())
+      : stepShown(chosen, this.steps());
+  });
+  protected readonly index = computed(() => this.steps().indexOf(this.step()));
+  protected readonly isLast = computed(() => this.index() === this.steps().length - 1);
 
   protected readonly title = computed(() => groupTitle(this.step(), { kind: 'self' }));
   protected readonly lede = computed(() => stepLede(this.step()));
   protected readonly kicker = computed(
-    () => $localize`Step ${this.index() + 1}:step: of ${INTAKE_STEPS.length}:total:`,
+    () => $localize`Step ${this.index() + 1}:step: of ${this.steps().length}:total:`,
   );
   protected readonly privacy = computed(() => healthPrivacy());
 
   protected readonly progress = computed(() =>
-    INTAKE_STEPS.map((id, position) => ({
+    this.steps().map((id, position) => ({
       id,
       number: position + 1,
       name: stepName(id),
@@ -131,7 +144,8 @@ export class IntakeSteps {
       ),
     ),
   );
-  private readonly dirty = computed(() => hasChanges(this.values(), this.saved()));
+  /** Over the steps there are: health typed before the step closed can never be saved, so it never asks. */
+  private readonly dirty = computed(() => hasChanges(this.values(), this.saved(), this.steps()));
 
   constructor() {
     inject(DestroyRef).onDestroy(() => {
@@ -147,7 +161,7 @@ export class IntakeSteps {
   }
 
   protected back(): void {
-    const previous = INTAKE_STEPS[this.index() - 1];
+    const previous = this.steps()[this.index() - 1];
     if (previous) this.go(previous);
   }
 
@@ -164,7 +178,11 @@ export class IntakeSteps {
     }
 
     const step = this.step();
-    const sent = mergeSteps(this.saved(), this.values(), [step]);
+    const sent = withSavedHealth(
+      mergeSteps(this.saved(), this.values(), [step]),
+      this.saved(),
+      this.profile(),
+    );
     const version = this.profile().version;
     this.busy.set(true);
     this.refusal.set(null);
@@ -182,15 +200,16 @@ export class IntakeSteps {
         this.summary().focus();
         return;
       }
-      const after = INTAKE_STEPS[this.index() + 1];
-      if (after) this.go(after);
+      // After the step that was saved, among the steps there are now (an answer may close Health).
+      const after = stepAfter(step, this.steps());
+      if (after) this.go(after, step);
     } finally {
       this.busy.set(false);
     }
   }
 
-  private go(step: IntakeStepId): void {
-    this.passed.update((set) => new Set(set).add(this.step()));
+  private go(step: IntakeStepId, from: IntakeStepId = this.step()): void {
+    this.passed.update((set) => new Set(set).add(from));
     this.chosen.set(step);
     this.refusal.set(null);
     this.attempt.reset();

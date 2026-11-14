@@ -20,11 +20,11 @@
     </section>
   }
 
-  @for (group of groups; track group) {
+  @for (group of groups(); track group) {
     <section class="panel" [attr.aria-labelledby]="'intake-' + group">
       <div class="panel-head">
-        <h2 [id]="'intake-' + group">{{ titleOf(group) }}</h2>
-        @if (editable()) {
+        <h2 [id]="'intake-' + group" tabindex="-1">{{ titleOf(group) }}</h2>
+        @if (editable() && (group !== 'health' || healthOpen())) {
           <button
             appButton
             type="button"
@@ -37,6 +37,9 @@
           </button>
         }
       </div>
+      @if (group === 'health' && !healthOpen()) {
+        <p class="quiet" data-health-closed>{{ closedNote }}</p>
+      }
       <dl class="answers">
         @for (row of rows()[group]; track row.key) {
           <div class="answer" [class.long]="row.longText">

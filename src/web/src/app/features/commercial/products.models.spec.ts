@@ -11,8 +11,11 @@ import {
   catalogSummary,
   clientsLine,
   duration,
+  emptyMaxOption,
   emptyOption,
   emptyPackOption,
+  MAX_FEATURES,
+  maxFeaturesRefusal,
   offerLength,
   optionErrors,
   optionLength,
@@ -190,6 +193,30 @@ describe('Plans you sell, in coach words', () => {
     expect(optionRow(offer({ clients: { now: 3, starting: 0 } }), 'en-US').clients).toBe(
       '3 clients',
     );
+  });
+
+  describe('the house’s Max plan (N9c5a)', () => {
+    it('starts another price option with Max’s four, and sends exactly them', () => {
+      const option = emptyMaxOption('USD');
+      expect(option).toEqual({ ...emptyOption('USD'), features: MAX_FEATURES });
+      expect(MAX_FEATURES).toEqual(['Training', 'Nutrition', 'CheckIns', 'Messaging']);
+      expect(optionErrors({ ...option, price: 120 })).toEqual({});
+      expect(optionRequest({ ...option, length: 4, price: 120 }).features).toEqual(
+        features('Training', 'Nutrition', 'CheckIns', 'Messaging'),
+      );
+    });
+
+    it('reads the server’s sentence on what a Max plan covers, on the option or the plan', () => {
+      const sentence = 'A Max plan covers Training, Nutrition, Check-ins and Messaging, all four.';
+      const refused = (status: number, errors: Record<string, string[]>) =>
+        new HttpErrorResponse({ status, error: { status, errors } });
+
+      expect(maxFeaturesRefusal(refused(400, { offer: [sentence] }))).toBe(sentence);
+      expect(maxFeaturesRefusal(refused(400, { Product: [sentence] }))).toBe(sentence);
+      expect(maxFeaturesRefusal(refused(400, { priceAmount: ['Too low.'] }))).toBeNull();
+      expect(maxFeaturesRefusal(refused(409, { offer: [sentence] }))).toBeNull();
+      expect(maxFeaturesRefusal(new Error('offline'))).toBeNull();
+    });
   });
 
   describe('session packs (critique B10b)', () => {

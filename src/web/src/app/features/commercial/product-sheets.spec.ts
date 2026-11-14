@@ -17,6 +17,7 @@ import {
   settle,
   tick,
 } from '../../../testing/dom';
+import { maxProduct } from '../../../testing/max-staff-fixtures';
 import { features, offer, packProduct, product } from '../../../testing/product-fixtures';
 import { ProductSheet, type ProductSheetMode } from './product-sheets';
 import { ProductsApi } from './products-api';
@@ -651,6 +652,130 @@ describe('ProductSheet', () => {
     await settle(fixture);
 
     expect(dirty.at(-1)).toBe(true);
+  });
+
+  describe('the house’s Max plan (N9c5a)', () => {
+    const MAX = maxProduct();
+    const LINE = 'A Max plan covers Training, Nutrition, Check-ins and Messaging, all four.';
+
+    it('locks a new price option to Max’s four, ticked, with Resources off, and says why', async () => {
+      const { host } = await render({ kind: 'option', product: MAX });
+
+      expect(included(host)).toEqual([
+        ['Training', true],
+        ['Nutrition', true],
+        ['Check-ins', true],
+        ['Messaging', true],
+        ['Resources', false],
+      ]);
+      const boxes = Array.from(
+        host.querySelectorAll<HTMLInputElement>('fieldset.features input[type="checkbox"]'),
+      );
+      expect(boxes.every((box) => box.disabled)).toBe(true);
+      const fieldset = query(host, 'fieldset.features');
+      expect(fieldset.getAttribute('aria-describedby')).toBe('plan-features-max');
+      expect(describedText(fieldset)).toBe(LINE);
+      expect(host.querySelector('#plan-features-max')?.className).toBe('muted');
+    });
+
+    it('sends exactly the four, in the page’s order, whatever is pressed', async () => {
+      const { fixture, host, api } = await render({ kind: 'option', product: MAX });
+      fill(host, 'Length in weeks', '8');
+      fill(host, 'Price', '220');
+      // Locked boxes take no press.
+      tick(host, 'Resources');
+      tick(host, 'Nutrition', false);
+      await settle(fixture);
+      press(host, 'Add price option');
+      await settle(fixture);
+
+      expect(api.addOffer).toHaveBeenCalledWith('p-max', {
+        label: '8 weeks',
+        durationCount: 8,
+        durationUnit: 'Week',
+        priceAmount: 220,
+        priceCurrency: 'USD',
+        features: features('Training', 'Nutrition', 'CheckIns', 'Messaging'),
+      });
+    });
+
+    it('says the server’s refusal of what it includes under What’s included, until the next try', async () => {
+      const { fixture, host, api, closed } = await render({ kind: 'option', product: MAX });
+      api.addOffer.mockReturnValueOnce(
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 400,
+              error: { status: 400, errors: { offer: [LINE] } },
+            }),
+        ),
+      );
+      fill(host, 'Price', '120');
+      await settle(fixture);
+      press(host, 'Add price option');
+      await settle(fixture);
+
+      const fieldset = query(host, 'fieldset.features');
+      expect(fieldset.getAttribute('aria-describedby')).toBe(
+        'plan-features-max plan-features-error',
+      );
+      expect(textOf(host.querySelector('#plan-features-error'))).toBe(LINE);
+      expect(announced(host)).toBe('Check the fields marked above.');
+      expect(closed).toEqual([]);
+
+      press(host, 'Add price option');
+      await settle(fixture);
+      expect(host.querySelector('#plan-features-error')).toBeNull();
+      expect(closed).toEqual([expect.objectContaining({ id: 'p-saved' })]);
+    });
+
+    it('keeps any other refusal of a Max option in the summary', async () => {
+      const { fixture, host, api } = await render({ kind: 'option', product: MAX });
+      api.addOffer.mockReturnValueOnce(
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 409,
+              error: { code: 'active_offer_slot_conflict', message: 'Duplicate.' },
+            }),
+        ),
+      );
+      fill(host, 'Price', '120');
+      await settle(fixture);
+      press(host, 'Add price option');
+      await settle(fixture);
+
+      expect(host.querySelector('#plan-features-error')).toBeNull();
+      expect(announced(host)).toBe(
+        'This plan already sells an option of that length in that currency. Change its price instead, or stop selling it first.',
+      );
+    });
+
+    it('leaves any other plan’s boxes free, and its refusals in the summary', async () => {
+      const { fixture, host, api } = await render({ kind: 'option', product: ONLINE });
+      expect(host.querySelector('#plan-features-max')).toBeNull();
+      expect(query(host, 'fieldset.features').getAttribute('aria-describedby')).toBeNull();
+      expect(
+        Array.from(host.querySelectorAll<HTMLInputElement>('fieldset.features input')).some(
+          (box) => box.disabled,
+        ),
+      ).toBe(false);
+      api.addOffer.mockReturnValueOnce(
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 400,
+              error: { status: 400, errors: { offer: ['Plain words from the server.'] } },
+            }),
+        ),
+      );
+      fill(host, 'Price', '120');
+      await settle(fixture);
+      press(host, 'Add price option');
+      await settle(fixture);
+      expect(host.querySelector('#plan-features-error')).toBeNull();
+      expect(announced(host)).toBe('Plain words from the server.');
+    });
   });
 
   describe('a session pack (critique B10b)', () => {

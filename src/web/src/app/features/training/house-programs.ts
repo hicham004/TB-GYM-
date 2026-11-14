@@ -16,6 +16,7 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { ApiClient } from '../../core/api/api-client';
 import { GuardedSheets, type Closable } from '../../core/forms/guarded-sheets';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
@@ -32,6 +33,7 @@ import { HouseProgramsApi } from './house-programs-api';
 import {
   allMaxesTyped,
   blockLine,
+  coachedOnMax,
   maxDetail,
   programDay,
   refusalWords,
@@ -67,7 +69,8 @@ interface FreeOffer {
  * (Pro+ and when it ends, or Free and how to get Pro+), then each program the house offers with whom it
  * suits, its sample week and the maxes it reads, and Start under a pass. The trainee types their own
  * maxes in a sheet. The server decides what may start and refuses the rest (N9c3); this page says why in
- * the house's words, and every day it shows comes from the server.
+ * the house's words, and every day it shows comes from the server. A trainee Max coaches, with no Pro+
+ * pass, reads that their coach picks their program instead of Pro+'s offer (N9c5b).
  */
 @Component({
   selector: 'app-house-programs',
@@ -89,6 +92,7 @@ interface FreeOffer {
 export class HousePrograms extends GuardedSheets {
   private readonly api = inject(HouseProgramsApi);
   private readonly housePlans = inject(HousePlansApi);
+  private readonly profiles = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly router = inject(Router);
   private readonly tenants = inject(TenantStore);
@@ -114,6 +118,11 @@ export class HousePrograms extends GuardedSheets {
   protected readonly read = signal<HouseProgramsRead | null>(null);
   /** What the house sells, read on Free alone; null when not read or the read failed. */
   private readonly plans = signal<HousePlans | null>(null);
+  /**
+   * Whether Max coaches the trainee today, read from their own profile beside the plans, with no pass
+   * alone; null when not read or the read failed, which keeps Free's words (N9c5b).
+   */
+  private readonly coachedByTheHouse = signal<boolean | null>(null);
   /** The program whose Start is on its way. */
   protected readonly starting = signal<string | null>(null);
   /** The Start question is open: a second press opens no second one. */
@@ -132,6 +141,20 @@ export class HousePrograms extends GuardedSheets {
   private readonly context = computed<RefusalContext | null>(() => {
     const read = this.read();
     return read ? this.contextOf(read) : null;
+  });
+  /** On Max with no Pro+ pass: their coach picks their program, and the program running is named. */
+  protected readonly max = computed(() => {
+    const read = this.read();
+    if (!read || !coachedOnMax(read, this.coachedByTheHouse())) return null;
+    return {
+      running: read.running
+        ? {
+            name: read.running.name,
+            until: this.day(read.running.lastDay),
+            stranded: runningStranded(read),
+          }
+        : null,
+    };
   });
   protected readonly pass = computed(() => {
     const read = this.read();
@@ -196,6 +219,7 @@ export class HousePrograms extends GuardedSheets {
       this.closeSheets();
       this.read.set(null);
       this.plans.set(null);
+      this.coachedByTheHouse.set(null);
       this.starting.set(null);
       this.startProblem.set(null);
       this.notice.set(null);
@@ -229,17 +253,26 @@ export class HousePrograms extends GuardedSheets {
       try {
         const read = await owner.wait(firstValueFrom(this.api.programs()));
         if (trainingClosed(read)) {
-          this.present(null, null, 'closed');
+          this.present(null, null, null, 'closed');
           return;
         }
-        // What the house sells matters only on Free: under a pass there is nothing to ask for.
-        const plans = read.pass === null ? await this.readPlans(owner) : null;
-        this.present(read, plans, 'ready');
+        // What the house sells, and whether Max coaches them, matter only with no pass: under one there
+        // is nothing to ask for. Both are read at once, so Free waits for no second round trip.
+        const [plans, coached]: [HousePlans | null, boolean | null] =
+          read.pass === null
+            ? await Promise.all([this.readPlans(owner), this.readCoached(owner)])
+            : [null, null];
+        this.present(read, coached === true ? null : plans, coached, 'ready');
       } catch (error) {
         if (!owner.current) return;
         const status = error instanceof HttpErrorResponse ? error.status : null;
         // A 404 is no failure: the programs are TB Gym's own trainees' alone, and this is not one.
-        this.present(null, null, status === 404 ? 'gone' : status === 403 ? 'closed' : 'error');
+        this.present(
+          null,
+          null,
+          null,
+          status === 404 ? 'gone' : status === 403 ? 'closed' : 'error',
+        );
       }
     });
   }
@@ -338,10 +371,12 @@ export class HousePrograms extends GuardedSheets {
   private present(
     read: HouseProgramsRead | null,
     plans: HousePlans | null,
+    coached: boolean | null,
     state: PageState,
   ): void {
     this.read.set(read);
     this.plans.set(plans);
+    this.coachedByTheHouse.set(coached);
     this.state.set(state);
   }
 
@@ -349,6 +384,17 @@ export class HousePrograms extends GuardedSheets {
   private async readPlans(owner: TenantOperation): Promise<HousePlans | null> {
     try {
       return await owner.wait(firstValueFrom(this.housePlans.plans()));
+    } catch {
+      owner.check();
+      return null;
+    }
+  }
+
+  /** Whether Max coaches the trainee today, from their own profile; a failure keeps Free's words. */
+  private async readCoached(owner: TenantOperation): Promise<boolean | null> {
+    try {
+      const self = await owner.wait(firstValueFrom(this.profiles.getSelfProfile()));
+      return self.coachedByTheHouse === true;
     } catch {
       owner.check();
       return null;

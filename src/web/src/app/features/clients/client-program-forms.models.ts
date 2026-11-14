@@ -52,21 +52,27 @@ export function planPaid(enrollment: ClientEnrollment | undefined): boolean {
   );
 }
 
+/** A plan that includes training and is neither cancelled nor over. */
+function coversTraining(enrollment: ClientEnrollment): boolean {
+  return (
+    enrollment.features.includes('Training') &&
+    enrollment.effectiveStatus !== 'Cancelled' &&
+    enrollment.effectiveStatus !== 'Expired'
+  );
+}
+
 /**
  * The plans a program can be assigned under: they include training and are neither cancelled nor
- * over. A plan whose last day has passed counts as over even before the system marks it so.
+ * over. A plan whose last day has passed counts as over even before the system marks it so. The
+ * house's Free is left out: it covers a trainee's own workouts, never a program (N9b1), so a Max
+ * trainee's first choice is Max (N9c5a).
  */
 export function planChoices(
   enrollments: readonly ClientEnrollment[],
   locale: string,
 ): PlanChoice[] {
   return enrollments
-    .filter(
-      (enrollment) =>
-        enrollment.features.includes('Training') &&
-        enrollment.effectiveStatus !== 'Cancelled' &&
-        enrollment.effectiveStatus !== 'Expired',
-    )
+    .filter((enrollment) => coversTraining(enrollment) && enrollment.houseTier !== 'Free')
     .sort((a, b) => a.startDate.localeCompare(b.startDate))
     .map((enrollment) => ({
       id: enrollment.id,
@@ -75,6 +81,17 @@ export function planChoices(
       lastDay: enrollment.lastActiveDate,
       paid: planPaid(enrollment),
     }));
+}
+
+/** Free is the only plan that covers training: the trainee trains on their own, with nothing to assign. */
+export function onFreeAlone(enrollments: readonly ClientEnrollment[]): boolean {
+  const training = enrollments.filter(coversTraining);
+  return training.length > 0 && training.every((enrollment) => enrollment.houseTier === 'Free');
+}
+
+/** Why nothing can be assigned to a trainee on Free alone, said where Assign program would be. */
+export function freeAloneLine(firstName: string): string {
+  return $localize`${firstName}:name: is on Free alone, which covers their own workouts and no program. Assign one once a plan with training is booked on Service & access.`;
 }
 
 /** "The client sees it": on the program's first day, or now (TRN-023). */

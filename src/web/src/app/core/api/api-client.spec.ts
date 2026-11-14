@@ -71,6 +71,47 @@ describe('ApiClient contract mapping', () => {
     });
   });
 
+  it('reads the Health step and Max coaching on the own profile, a missing value as before N9c5a', () => {
+    const answer = (extra: Record<string, unknown>) => ({
+      id: 'client-a',
+      firstName: 'Mira',
+      lastName: 'Haddad',
+      email: 'mira@example.test',
+      phoneNumber: null,
+      birthDate: null,
+      heightCentimeters: null,
+      heightEnteredValue: null,
+      heightEnteredUnit: null,
+      workType: null,
+      averageDailySteps: null,
+      trainingBackground: null,
+      foodPreferences: null,
+      foodAversions: null,
+      goals: null,
+      allergies: null,
+      medications: null,
+      previousInjuries: null,
+      onboardingStatus: 'NotStarted',
+      onboardingCompletedAtUtc: null,
+      version: 1,
+      ...extra,
+    });
+    const read: { healthStepOpen: boolean; coachedByTheHouse?: boolean }[] = [];
+    for (const extra of [
+      { selfDirected: true, healthStepOpen: false, coachedByTheHouse: false },
+      { selfDirected: true, healthStepOpen: true, coachedByTheHouse: true },
+      {},
+    ]) {
+      api.getSelfProfile().subscribe((profile) => read.push(profile));
+      http.expectOne('/api/client-profile/me').flush(answer(extra));
+    }
+    expect(read.map((profile) => [profile.healthStepOpen, profile.coachedByTheHouse])).toEqual([
+      [false, false],
+      [true, true],
+      [true, false],
+    ]);
+  });
+
   it('normalizes immutable commercial money, payments, and concurrency values', () => {
     api.getClientCommercialOverview('client-a').subscribe((overview) => {
       const enrollment = overview.enrollments[0];

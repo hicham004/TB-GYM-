@@ -1219,3 +1219,353 @@ describe('ClientPlanPage for a self-directed trainee (notes plan N9c2)', () => {
     expect(host.querySelector('[role="alert"]')).toBeNull();
   });
 });
+
+// ---------- Max, TB Gym coaching the trainee, for a limited number of places (notes plan N9c5b) ----------
+
+/** A month of Max, as the house sells it: TB Gym's four coaching features. */
+const MAX_MONTH = offerView({
+  offerId: 'max-month',
+  productId: 'max',
+  tier: 'Max',
+  name: 'Max',
+  description: 'TB Gym coaches you: your program, your food, a weekly check-in and messages.',
+  optionLabel: 'A month',
+  priceAmount: 120,
+  durationCount: 4,
+  features: ['Training', 'Nutrition', 'CheckIns', 'Messaging'],
+  placeOpen: false,
+});
+const MAX_THREE = offerView({
+  ...MAX_MONTH,
+  offerId: 'max-three',
+  optionLabel: 'Three months',
+  priceAmount: 330,
+  durationCount: 12,
+});
+
+/** An ask for a month of Max, waiting for its place unless a test says otherwise. */
+const maxAskView = (overrides: Partial<HousePlanAskView> = {}) =>
+  askView({
+    offerId: 'max-month',
+    tier: 'Max',
+    planName: 'Max',
+    optionLabel: 'A month',
+    priceAmount: 120,
+    durationCount: 4,
+    placeOpen: false,
+    ...overrides,
+  });
+
+const FULL_LINE =
+  'Every place on Max is taken right now. You can still ask: your ask waits in line, and you send money only once a place opens for you.';
+const NOT_OPEN =
+  'A Max place isn’t open for you yet. Your ask is kept in line; don’t send money until a place opens.';
+const MAX_CLOSED =
+  'Max isn’t taking anyone right now. Your ask is kept; don’t send money until it opens again.';
+
+describe('ClientPlanPage for a trainee asking for Max (notes plan N9c5b)', () => {
+  afterEach(() => {
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
+    TestBed.resetTestingModule();
+  });
+
+  const withMax = (overrides: Partial<HousePlansView> = {}) =>
+    houseRead({ plans: [offerView(), EIGHT_WEEKS, MAX_MONTH, MAX_THREE], ...overrides });
+
+  it('says under Max that every place is taken, tied to its Ask for buttons, which stay', async () => {
+    const { host } = await renderTrainee({ plans: vi.fn(() => of(withMax())) });
+
+    const offers = [...host.querySelectorAll<HTMLElement>('article.offer')];
+    expect(offers.map((offer) => text(offer.querySelector('h3')!))).toEqual(['Pro+', 'Max']);
+    const max = offers[1];
+    const line = max.querySelector<HTMLElement>('[data-place-line]')!;
+    expect(text(line)).toBe(FULL_LINE);
+    expect(line.classList).toContain('quiet');
+    // Under what it includes, before its options.
+    expect(line.previousElementSibling?.matches('ul.includes')).toBe(true);
+    expect(line.nextElementSibling?.matches('ul.options')).toBe(true);
+    const asks = [...max.querySelectorAll<HTMLButtonElement>('.option button')];
+    expect(asks.map(text)).toEqual(['Ask for A month', 'Ask for Three months']);
+    expect(asks.map((ask) => ask.getAttribute('aria-describedby'))).toEqual([line.id, line.id]);
+    expect(line.id).toBe('place-max');
+    // The name still starts with the words on the button (WCAG 2.5.3).
+    expect(asks.map((ask) => ask.getAttribute('aria-label'))).toEqual([
+      'Ask for A month, Max',
+      'Ask for Three months, Max',
+    ]);
+    // Pro+ says nothing of places.
+    expect(offers[0].querySelector('[data-place-line]')).toBeNull();
+    expect(offers[0].querySelector('button[aria-describedby]')).toBeNull();
+  });
+
+  it('says nothing of places while a Max place is open, or when the read does not say', async () => {
+    for (const placeOpen of [true, null]) {
+      const { host } = await renderTrainee({
+        plans: vi.fn(() =>
+          of(
+            houseRead({
+              plans: [
+                { ...MAX_MONTH, placeOpen },
+                { ...MAX_THREE, placeOpen },
+              ],
+            }),
+          ),
+        ),
+      });
+
+      expect(host.querySelector('[data-place-line]'), String(placeOpen)).toBeNull();
+      expect(host.querySelector('.option button[aria-describedby]')).toBeNull();
+      TestBed.resetTestingModule();
+    }
+  });
+
+  it('asks for Max in line: the sheet says not to send money, and the card shows nothing to pay', async () => {
+    const asked = toHouseAsk(maxAskView());
+    const { fixture, host, housePlans } = await renderTrainee({
+      plans: vi.fn(() => of(withMax())),
+      ask: vi.fn(() => of(asked)),
+    });
+
+    press(host, 'Ask for A month');
+    await settle(fixture);
+    const opened = sheet()!;
+    expect(text(opened.querySelector('.tb-modal__title')!)).toBe('Ask for Max');
+    const words = opened.querySelector<HTMLElement>('[data-ask-words]')!;
+    expect(text(words.querySelector('[data-ask-choice]')!)).toBe('A month · 4 weeks · USD 120');
+    expect(text(words.querySelector('[data-ask-waits]')!)).toBe(
+      'Every place on Max is taken right now, so your ask waits in line, in the order asked. Don’t send money yet: once a place opens for you, this page shows where to send it. Free keeps running underneath.',
+    );
+    expect(text(words)).not.toContain('You pay TB Gym by Whish');
+    expect(text(words)).toContain(
+      'You can ask for something else once TB Gym books or closes this ask.',
+    );
+    // Still one focusable region of words (axe scrollable-region-focusable at 200% text).
+    expect(words.getAttribute('tabindex')).toBe('0');
+    expect(words.getAttribute('role')).toBe('region');
+
+    press(opened, 'Ask for it');
+    await settle(fixture);
+
+    expect(housePlans.ask).toHaveBeenCalledExactlyOnceWith('max-month');
+    expect(sheet()).toBeNull();
+    const card = host.querySelector<HTMLElement>('section.plan[data-open-ask]')!;
+    expect(text(card.querySelector('app-status-pill')!)).toBe('Waiting for a place');
+    expect(text(card.querySelector('#ask-line')!)).toBe('Max, A month · USD 120 for 4 weeks');
+    const news = card.querySelector<HTMLElement>('.ask-news')!;
+    expect(text(news)).toBe(
+      'Asked. You’re in line for a place on Max; don’t send money until this page says one is open.',
+    );
+    expect(document.activeElement).toBe(news);
+    // Nothing says to send money: no Whish number, no Copy, no I've paid.
+    expect(
+      card.querySelector('.whish, [data-copy-whish], [data-paid], [data-place-open]'),
+    ).toBeNull();
+    expect(text(card)).not.toContain('If you already sent the money');
+    expect(text(card)).not.toContain('+961 70 123456');
+    expect(text(card)).toContain('Nothing changes until TB Gym books it. Free keeps running.');
+    expect(card.querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it('words a Pro+ option as before beside a full Max', async () => {
+    const { fixture, host } = await renderTrainee({ plans: vi.fn(() => of(withMax())) });
+
+    press(host, 'Ask for Two blocks');
+    await settle(fixture);
+
+    expect(sheet()!.querySelector('[data-ask-waits]')).toBeNull();
+    expect(text(sheet()!)).toContain('You pay TB Gym by Whish, then tell us here.');
+  });
+
+  it('reads a waiting Max ask with the server’s sentence in its status line, and nothing to pay', async () => {
+    const { host } = await renderTrainee({
+      plans: vi.fn(() => of(withMax({ asks: [maxAskView()] }))),
+    });
+
+    const card = host.querySelector<HTMLElement>('[data-open-ask]')!;
+    const pill = card.querySelector('app-status-pill')!;
+    expect(text(pill)).toBe('Waiting for a place');
+    expect(pill.classList).toContain('info');
+    const news = card.querySelector<HTMLElement>('.ask-news')!;
+    expect(news.getAttribute('role')).toBe('status');
+    expect(text(news)).toBe(NOT_OPEN);
+    expect(card.querySelector('.whish, [data-copy-whish], [data-paid]')).toBeNull();
+    expect(text(card)).not.toContain('If you already sent the money');
+    // One ask at a time, as for Pro+.
+    expect(host.querySelector('[data-plans-to-add]')).toBeNull();
+  });
+
+  // "If you already sent the money" stands in for the Whish block only when the house shows no
+  // Whish number, so a waiting Max ask must hide it there too. (A Pro+ ask still shows it: "asks
+  // only to be told when the house has no Whish number to show" above.)
+  it('asks nothing of the money for a waiting Max ask when the house has no Whish number', async () => {
+    const { host } = await renderTrainee({
+      plans: vi.fn(() => of(withMax({ asksOpen: false, whishNumber: null, asks: [maxAskView()] }))),
+    });
+
+    const card = host.querySelector<HTMLElement>('[data-open-ask]')!;
+    expect(text(card.querySelector('app-status-pill')!)).toBe('Waiting for a place');
+    expect(text(card.querySelector('.ask-news')!)).toBe(NOT_OPEN);
+    expect(text(card)).not.toContain('If you already sent the money');
+    expect(card.querySelector('.whish, [data-copy-whish], [data-paid]')).toBeNull();
+    expect([...card.querySelectorAll('button')].map(text)).not.toContain('I’ve paid');
+  });
+
+  it('reads a Max ask whose place is open as Pro+’s, saying the place is open first', async () => {
+    const { host } = await renderTrainee({
+      plans: vi.fn(() => of(withMax({ asks: [maxAskView({ placeOpen: true })] }))),
+    });
+
+    const card = host.querySelector<HTMLElement>('[data-open-ask]')!;
+    expect(text(card.querySelector('app-status-pill')!)).toBe('Waiting for your payment');
+    const notes = [...card.querySelectorAll('.plan-note:not(.ask-news)')].map(text);
+    expect(notes).toEqual([
+      'A place on Max is open for you now.',
+      'Send USD 120 by Whish to +961 70 123456, then tell TB Gym you sent it.',
+      'Nothing changes until TB Gym books it. Free keeps running.',
+    ]);
+    expect(text(card.querySelector('.ask-news')!)).toBe('');
+    expect(card.querySelector('[data-copy-whish]')).not.toBeNull();
+    expect(card.querySelector('[data-paid]')).not.toBeNull();
+  });
+
+  it('reads a Max ask said paid exactly as any ask said paid', async () => {
+    const { host } = await renderTrainee({
+      plans: vi.fn(() =>
+        of(
+          withMax({
+            asks: [
+              maxAskView({
+                state: 'MoneySent',
+                placeOpen: true,
+                moneySent: {
+                  whishName: 'Rima Aboud',
+                  whishNumber: '+961 71 234567',
+                  sentOn: TODAY,
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    });
+
+    const card = host.querySelector<HTMLElement>('[data-open-ask]')!;
+    expect(text(card.querySelector('app-status-pill')!)).toBe('Money sent');
+    expect(text(card.querySelector('.ask-news')!)).toBe(
+      'You said you sent it on Thu 15 Oct from Rima Aboud, +961 71 234567.',
+    );
+    expect(text(card)).toContain(
+      'TB Gym books your plan once the money is there. Free keeps running underneath.',
+    );
+    expect(card.querySelector('[data-place-open], [data-paid], [data-copy-whish]')).toBeNull();
+  });
+
+  for (const [code, message] of [
+    ['house_max_place_not_open', NOT_OPEN],
+    ['house_max_closed', MAX_CLOSED],
+  ] as const) {
+    it(`says "I’ve paid" refused with ${code} in the server’s words, then reads the ask again`, async () => {
+      const reads = [
+        withMax({ asks: [maxAskView({ placeOpen: true })] }),
+        withMax({ asks: [maxAskView()] }),
+      ];
+      const { fixture, host, housePlans } = await renderTrainee({
+        plans: vi.fn(() => of(reads.shift()!)),
+        moneySent: vi.fn(() =>
+          throwError(() => new HttpErrorResponse({ status: 409, error: { code, message } })),
+        ),
+      });
+
+      const opener = button(host, 'I’ve paid');
+      opener.focus();
+      opener.click();
+      await settle(fixture);
+      fill(sheet()!, 'Name on your Whish account', 'Rima Aboud');
+      fill(sheet()!, 'Your Whish number', '+961 71 234567');
+      await settle(fixture);
+      press(sheet()!, 'Send');
+      await settle(fixture);
+
+      const summary = formSummary(sheet()!);
+      expect(text(summary)).toBe(message);
+      expect(document.activeElement).toBe(summary);
+      expect(housePlans.plans).toHaveBeenCalledTimes(1);
+      press(sheet()!, 'Not now');
+      await settle(fixture);
+
+      expect(housePlans.plans).toHaveBeenCalledTimes(2);
+      const card = host.querySelector<HTMLElement>('[data-open-ask]')!;
+      expect(text(card.querySelector('app-status-pill')!)).toBe('Waiting for a place');
+      expect(card.querySelector('[data-paid], .whish')).toBeNull();
+      // "I've paid" went with the new read: the status line saying where the ask stands takes focus.
+      const news = card.querySelector<HTMLElement>('.ask-news')!;
+      expect(text(news)).toBe(NOT_OPEN);
+      expect(opener.isConnected).toBe(false);
+      expect(document.activeElement).toBe(news);
+    });
+  }
+
+  it('opens no "I’ve paid" sheet for an ask waiting for its place, even when asked to', async () => {
+    const { fixture, housePlans } = await renderTrainee({
+      plans: vi.fn(() => of(withMax({ asks: [maxAskView()] }))),
+    });
+    const page = fixture.componentInstance as unknown as {
+      openAsk(): { waitingForPlace: boolean } | null;
+      openPaidSheet(ask: unknown): void;
+    };
+
+    expect(page.openAsk()?.waitingForPlace).toBe(true);
+    page.openPaidSheet(page.openAsk());
+    await settle(fixture);
+
+    expect(sheet()).toBeNull();
+    expect(housePlans.moneySent).not.toHaveBeenCalled();
+  });
+
+  it('never leaves "send the money" on an ask whose Max place went before I’ve paid', async () => {
+    const reads = [withMax(), withMax({ asks: [maxAskView()] })];
+    const { fixture, host, housePlans } = await renderTrainee({
+      plans: vi.fn(() => of(reads.shift()!)),
+      // A place was open when the trainee asked.
+      ask: vi.fn(() => of(toHouseAsk(maxAskView({ placeOpen: true })))),
+      moneySent: vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 409,
+              error: { code: 'house_max_place_not_open', message: NOT_OPEN },
+            }),
+        ),
+      ),
+    });
+
+    press(host, 'Ask for A month');
+    await settle(fixture);
+    press(sheet()!, 'Ask for it');
+    await settle(fixture);
+    const card = () => host.querySelector<HTMLElement>('[data-open-ask]')!;
+    expect(text(card().querySelector('.ask-news')!)).toBe(
+      'Asked. Send the money by Whish, then tell TB Gym here.',
+    );
+    expect(text(card().querySelector('[data-place-open]')!)).toBe(
+      'A place on Max is open for you now.',
+    );
+
+    press(host, 'I’ve paid');
+    await settle(fixture);
+    fill(sheet()!, 'Name on your Whish account', 'Rima Aboud');
+    fill(sheet()!, 'Your Whish number', '+961 71 234567');
+    await settle(fixture);
+    press(sheet()!, 'Send');
+    await settle(fixture);
+    press(sheet()!, 'Not now');
+    await settle(fixture);
+
+    expect(housePlans.plans).toHaveBeenCalledTimes(2);
+    const news = card().querySelector<HTMLElement>('.ask-news')!;
+    expect(text(news)).toBe(NOT_OPEN);
+    expect(text(card())).not.toContain('Send the money');
+    expect(card().querySelector('[data-paid], .whish, [data-place-open]')).toBeNull();
+    expect(document.activeElement).toBe(news);
+  });
+});

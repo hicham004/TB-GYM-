@@ -398,6 +398,55 @@ describe('a client’s Training', () => {
       expect(host.querySelector('app-client-strength')).not.toBeNull();
     });
 
+    describe('a trainee of the house (N9c5a)', () => {
+      const free = plan({
+        id: 'enrollment-free',
+        productName: 'Free',
+        offerLabel: 'Free',
+        startDate: '2026-09-14',
+        endDateExclusive: '2027-09-14',
+        lastActiveDate: '2027-09-13',
+        houseTier: 'Free',
+      });
+
+      it('says Free alone covers the trainee’s own workouts and no program, and points to Service & access', async () => {
+        const { host, router } = await render({ program: coachProgram([]), enrollments: [free] });
+
+        expect(textOf(host.querySelector('app-empty-state h2'))).toBe('No program yet');
+        expect(textOf(host.querySelector('app-empty-state'))).toContain(
+          'Maya is on Free alone, which covers their own workouts and no program. Assign one once a plan with training is booked on Service & access.',
+        );
+        expect(all(host, 'button').map(textOf)).not.toContain('Assign program');
+        const link = host.querySelector<HTMLAnchorElement>('app-empty-state a')!;
+        expect(textOf(link)).toBe('Open Service & access');
+        expect(link.getAttribute('href')).toBe('/clients/client-1/service');
+        expect(router.url).toBe('/clients/client-1/training');
+      });
+
+      it('opens no Assign program from the address for a trainee on Free alone', async () => {
+        const { host, router } = await render({
+          program: coachProgram([]),
+          enrollments: [free],
+          url: '/clients/client-1/training?action=assign',
+        });
+
+        expect(dialog()).toBeNull();
+        expect(router.url).toBe('/clients/client-1/training');
+        expect(textOf(host)).toContain('Maya is on Free alone');
+      });
+
+      it('offers Assign program under Max beside Free, with the words of a coach’s client', async () => {
+        const { host } = await render({
+          program: coachProgram([]),
+          enrollments: [free, plan({ id: 'enrollment-max', houseTier: 'Max' })],
+        });
+
+        expect(textOf(host)).toContain('Maya sees it as soon as its first week opens.');
+        expect(textOf(host)).not.toContain('Free alone');
+        expect(all(host, 'button').map(textOf)).toContain('Assign program');
+      });
+    });
+
     it('says the program could not be loaded, and tries again', async () => {
       let attempts = 0;
       const { harness, host } = await render({

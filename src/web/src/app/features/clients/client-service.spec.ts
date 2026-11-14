@@ -32,6 +32,7 @@ import {
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
 import { installDialogSupport } from '../../../testing/dialog';
+import { houseMaxPlan, maxAsk } from '../../../testing/max-staff-fixtures';
 import {
   button,
   chooseOption,
@@ -344,6 +345,34 @@ describe('a client’s Service & access', () => {
 
     expect(textOf(dialog()?.querySelector('h2'))).toBe('Renew plan');
     expect(router.url).toBe('/clients/client-1/service');
+  });
+
+  it('keeps Max’s Renew plan closed in Manage plan, and opens no renewal of it from the address (N9c5a)', async () => {
+    // Max coaching ends on Mon 12 Oct, the day the server flags: any other plan would show a filled Renew.
+    const max = houseMaxPlan({ lastActiveDate: '2026-10-12', endDateExclusive: '2026-10-13' });
+    const { host, harness, router } = await render({
+      plans: plansOverview([freePlan(), max]),
+      url: '/clients/client-1/service?renew=e-max',
+    });
+    await settle(harness.fixture);
+
+    expect(dialog()).toBeNull();
+    expect(router.url).toBe('/clients/client-1/service');
+    expect(textOf(host.querySelector('#plan-title'))).toBe('Max coaching');
+    expect(all(host, '.hero-actions > button').map(textOf)).not.toContain('Renew plan');
+
+    press(host, 'Manage plan');
+    await settle(harness.fixture);
+    const renew = all(host, 'app-client-actions .item').find(
+      (item) => textOf(item.querySelector('.item-title')) === 'Renew plan',
+    )!;
+    expect(textOf(renew.querySelector('.item-hint'))).toBe(
+      'Max is booked from the trainee’s ask, so its places are kept.',
+    );
+    expect(renew.getAttribute('aria-disabled')).toBe('true');
+    renew.click();
+    await settle(harness.fixture);
+    expect(dialog()).toBeNull();
   });
 
   it('opens the payment of the renewal Coach Today says is unpaid, once (BEB-7)', async () => {
@@ -1207,6 +1236,132 @@ describe('a client’s Service & access', () => {
       expect(context.notice()).toBe('The ask is closed.');
       expect(list).toHaveBeenCalledTimes(2);
       expect(textOf(rows(host)[0].querySelector('app-status-pill'))).toBe('Closed');
+    });
+
+    describe('a Max ask (N9c5a)', () => {
+      const place = (row: HTMLElement) => textOf(row.querySelector('[data-place]'));
+
+      it('says where each open Max ask stands in line, and keeps Book plan whatever the turn', async () => {
+        const { host } = await render({
+          plans: trainee(),
+          houseAsks: {
+            list: asked(
+              maxAsk(),
+              maxAsk({
+                id: 'ask-max-open',
+                askedOn: '2026-09-28',
+                placeOpen: true,
+                placeInLine: 1,
+              }),
+              housePlanAsk({ askedOn: '2026-09-27' }),
+            ),
+          },
+        });
+
+        const [waiting, open, pro] = rows(host);
+        expect(textOf(waiting.querySelector('app-status-pill'))).toBe('Waiting for a place');
+        expect(place(waiting)).toBe(
+          'Number 2 in line for Max. No place is open for this ask yet, so Maya’s page says not to send money.',
+        );
+        expect(waiting.querySelector('[data-place]')?.className).toBe('ask-line');
+        expect(waiting.querySelector('[data-place]')?.getAttribute('dir')).toBe('auto');
+        expect(textOf(open.querySelector('app-status-pill'))).toBe('Waiting for the money');
+        expect(place(open)).toBe('Number 1 in line for Max. A place is open, so Maya can pay.');
+        // A Pro+ ask has no line of Max's.
+        expect(pro.querySelector('[data-place]')).toBeNull();
+        // The server books by the places free, not by the turn: every open ask keeps its buttons.
+        expect(all(panel(host)!, 'button').map((item) => item.getAttribute('aria-label'))).toEqual([
+          'Book plan, Max coaching, 4 weeks',
+          'Close ask, Max coaching, 4 weeks',
+          'Book plan, Max coaching, 4 weeks',
+          'Close ask, Max coaching, 4 weeks',
+          'Book plan, Pro+ Programs, 4 weeks',
+          'Close ask, Pro+ Programs, 4 weeks',
+        ]);
+        expect(
+          all(panel(host)!, 'button').every((item) => !(item as HTMLButtonElement).disabled),
+        ).toBe(true);
+      });
+
+      it('says a trainee holding a place holds it, and that Max is closed when it is', async () => {
+        const { host } = await render({
+          plans: trainee(),
+          houseAsks: {
+            list: asked(
+              maxAsk({
+                state: 'MoneySent',
+                placeOpen: true,
+                placeInLine: null,
+                moneySent: housePlanAsk().moneySent,
+              }),
+              maxAsk({ id: 'ask-max-closed', askedOn: '2026-09-28', placeInLine: null }),
+            ),
+          },
+        });
+
+        const [holder, closed] = rows(host);
+        expect(textOf(holder.querySelector('app-status-pill'))).toBe('Says it’s sent');
+        expect(place(holder)).toBe('Maya holds a Max place.');
+        expect(textOf(closed.querySelector('app-status-pill'))).toBe('Waiting for a place');
+        expect(place(closed)).toBe('Max is closed: TB Gym’s settings give it no places.');
+      });
+
+      it('says nothing of a place on a former trainee’s record, nor on an ended ask', async () => {
+        const { host } = await render({
+          plans: trainee(),
+          profile: FORMER,
+          houseAsks: {
+            list: asked(
+              maxAsk({ placeInLine: null }),
+              maxAsk({ id: 'ask-max-closed', state: 'Closed', placeOpen: null, placeInLine: null }),
+            ),
+          },
+        });
+
+        expect(rows(host).length).toBe(2);
+        expect(all(panel(host)!, '[data-place]')).toEqual([]);
+      });
+
+      it('warns in the booking sheet, and reads the asks again once a refused booking’s sheet is left', async () => {
+        const full = 'Every place on Max is taken. Book this ask once a place opens, or close it.';
+        const list = vi
+          .fn()
+          .mockReturnValueOnce(of([toHousePlanAsk(maxAsk({ placeInLine: 1 }))]))
+          .mockReturnValue(of([toHousePlanAsk(maxAsk({ placeInLine: 2 }))]));
+        const book = vi.fn(() =>
+          throwError(
+            () =>
+              new HttpErrorResponse({
+                status: 409,
+                error: { code: 'house_max_full', message: full },
+              }),
+          ),
+        );
+        const { host, harness, api, context } = await render({
+          plans: trainee(),
+          houseAsks: { list, book },
+        });
+
+        press(panel(host)!, 'Book plan');
+        await settle(harness.fixture);
+        expect(textOf(dialog()?.querySelector('[data-no-place]'))).toBe(
+          'Maya’s ask has no Max place yet, so they were told not to send money. Book it only if the money is there.',
+        );
+        press(dialog()!, 'Book plan');
+        await settle(harness.fixture);
+        expect(textOf(formSummary(dialog()!))).toBe(full);
+        // Read again only once the refusal has been read and the sheet left.
+        expect(list).toHaveBeenCalledTimes(1);
+
+        press(dialog()!, 'Not now');
+        await settle(harness.fixture);
+        expect(dialog()).toBeNull();
+        expect(api.getClientCommercialOverview).toHaveBeenCalledTimes(2);
+        expect(list).toHaveBeenCalledTimes(2);
+        expect(textOf(rows(host)[0].querySelector('[data-place]'))).toContain('Number 2 in line');
+        expect(document.activeElement?.id).toBe('asks-title');
+        expect(context.notice()).toBeNull();
+      });
     });
 
     it('closes an ask with the reason the trainee reads', async () => {

@@ -21,7 +21,8 @@ import { houseRefusal, type HouseAsk, type HouseAskChoice } from './house-plans.
  * "Ask for" a plan of the house's, confirmed (notes plan N9c2, SUB-020): the option, its length and its
  * price as the house sells it, then what happens next. Asking books nothing and Free keeps running; only
  * "Ask for it" calls the API. A refusal stays here in the server's words, and one that means the page is
- * out of date asks it to read the house's plans again once this closes.
+ * out of date asks it to read the house's plans again once this closes. While every place on Max is taken
+ * (N9c5a), it says the ask waits in line and no money is sent yet.
  */
 @Component({
   selector: 'app-house-plan-ask-sheet',
@@ -54,10 +55,19 @@ import { houseRefusal, type HouseAsk, type HouseAskChoice } from './house-plans.
             }
           </strong>
         </p>
-        <p i18n>
-          You pay TB Gym by Whish, then tell us here. The plan starts once TB Gym has your money, or
-          when your current plan ends if that is later. Free keeps running underneath.
-        </p>
+        @if (choice().waitingForPlace) {
+          <!-- Every place on Max is taken (N9c5a): the ask waits in line, and no money is sent yet. -->
+          <p data-ask-waits i18n>
+            Every place on Max is taken right now, so your ask waits in line, in the order asked.
+            Don’t send money yet: once a place opens for you, this page shows where to send it. Free
+            keeps running underneath.
+          </p>
+        } @else {
+          <p i18n>
+            You pay TB Gym by Whish, then tell us here. The plan starts once TB Gym has your money,
+            or when your current plan ends if that is later. Free keeps running underneath.
+          </p>
+        }
         <p class="muted" i18n>
           You can ask for something else once TB Gym books or closes this ask.
         </p>

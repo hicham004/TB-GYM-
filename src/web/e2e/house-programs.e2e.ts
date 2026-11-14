@@ -59,6 +59,8 @@ const TRAINEE = {
   displayName: 'Nour Khalil',
 };
 const FEATURES = ['Training', 'Nutrition', 'CheckIns', 'Messaging', 'ResourceLibrary', 'Sessions'];
+/** What a month of Max holds: the four features (N9c5a). */
+const MAX_FEATURES = ['Training', 'Nutrition', 'CheckIns', 'Messaging'];
 const SIZES = [
   [390, 844],
   [1440, 900],
@@ -89,6 +91,8 @@ function passRead(squat: number | null): HouseProgramsView {
 interface Options {
   readonly membership?: typeof HOUSE;
   readonly selfDirected?: boolean;
+  /** Max coaches them (notes plan N9c5b): its four features, and their profile says so. */
+  readonly coachedByTheHouse?: boolean;
   /** The programs read; a function reads the scene's state, so a write shows on the next read. */
   readonly programs?: (scene: Scene) => HouseProgramsView;
   /** Outside the house: the read answers 404. */
@@ -122,14 +126,22 @@ async function session(page: Page, options: Options = {}): Promise<Scene> {
       json(
         route,
         200,
-        FEATURES.map((feature) => ({
-          feature,
-          isAllowed: feature === 'Training',
-          reason: feature === 'Training' ? 'Granted' : 'NoEntitlement',
-        })),
+        FEATURES.map((feature) => {
+          const granted = options.coachedByTheHouse
+            ? MAX_FEATURES.includes(feature)
+            : feature === 'Training';
+          return { feature, isAllowed: granted, reason: granted ? 'Granted' : 'NoEntitlement' };
+        }),
       ),
     'GET /api/client-profile/me': (route) =>
-      json(route, 200, finishedProfile({ selfDirected: options.selfDirected ?? true })),
+      json(
+        route,
+        200,
+        finishedProfile({
+          selfDirected: options.selfDirected ?? true,
+          coachedByTheHouse: options.coachedByTheHouse ?? false,
+        }),
+      ),
     'GET /api/training/me/house-programs': (route) => {
       scene.reads++;
       if (options.gone) return json(route, 404, { title: 'Not Found', status: 404 });
@@ -316,6 +328,82 @@ test('on Free with an ask waiting, the page sends the trainee to My plan', async
   await expect(pass).toContainText('You asked for Pro+ Programs. My plan shows where it stands.');
   await expect(pass.getByRole('link', { name: 'My plan' })).toHaveAttribute('href', '/plan');
   await expect(pass.getByRole('link', { name: 'Ask for Pro+' })).toHaveCount(0);
+});
+
+// Notes plan N9c5b: Max coaches the trainee, so their coach picks their program; the page offers no Pro+.
+for (const [width, height] of SIZES) {
+  test(`on Max at ${width}px the page says the coach picks the program, names the one running and offers no Pro+`, async ({
+    page,
+  }) => {
+    const scene = await openPrograms(page, width, height, {
+      coachedByTheHouse: true,
+      programs: () => housePrograms({ running: runningBlock() }),
+    });
+
+    const pass = page.locator('[data-pass]');
+    await expect(pass.locator('.pass-title')).toHaveText(
+      'You’re on Max, so your coach picks your program and puts it on Training.',
+    );
+    await expect(pass.locator('[data-running]')).toHaveText(
+      'Strength Base 1 runs until Fri 27 Nov.',
+    );
+    const open = pass.getByRole('link', { name: 'Open Training' });
+    await expect(open).toHaveAttribute('href', '/training/program');
+    await expect(pass.getByRole('link', { name: 'Ask for Pro+' })).toHaveCount(0);
+    await expect(page.getByText('Free keeps running', { exact: false })).toHaveCount(0);
+    await expect(
+      page.locator('app-house-programs a[href="/plan"], app-house-programs a[href="/messages"]'),
+    ).toHaveCount(0);
+    await expect(page.locator('[data-start-program], [data-type-maxes]')).toHaveCount(0);
+    await expect(page.locator('[data-program]')).toHaveCount(3);
+    expect(scene.calls).toContain('GET /api/client-profile/me');
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath(`n9c5b-programs-max-${width}.png`),
+      fullPage: true,
+    });
+
+    await open.click();
+    await expect(page).toHaveURL(/\/training\/program$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Training' })).toBeVisible();
+  });
+}
+
+test('on Max at 390px the page follows dark mode and stays on the screen at 200% text', async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openPrograms(page, 390, 844, { coachedByTheHouse: true });
+
+  const pass = page.locator('[data-pass]');
+  await expect(pass.locator('[data-max-coach]')).toBeVisible();
+  await expect(pass.locator('[data-running]')).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
+  await expect(pass.getByRole('link', { name: 'Open Training' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await page.screenshot({
+    path: test.info().outputPath('n9c5b-programs-max-390-dark-200.png'),
+    fullPage: true,
+  });
+});
+
+test('on Max with a running Pro+ pass, the Pro+ card stays and Start is offered', async ({
+  page,
+}) => {
+  await openPrograms(page, 390, 844, {
+    coachedByTheHouse: true,
+    programs: () => passRead(140),
+  });
+
+  await expect(page.locator('[data-pass] .pass-title')).toHaveText('Pro+ until Fri 11 Dec');
+  await expect(page.locator('[data-max-coach]')).toHaveCount(0);
+  await expect(
+    card(page, BASE_1_LISTING).getByRole('button', { name: 'Start Strength Base 1' }),
+  ).toBeVisible();
 });
 
 test.describe('under a Pro+ pass', () => {

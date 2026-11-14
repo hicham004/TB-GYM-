@@ -84,8 +84,8 @@
           <div class="today-week-top">
             <strong i18n>This week</strong>
             @let progress = weekProgress();
-            <!-- A trainee's own workouts count too (TRN-033); a program's sessions keep their count. -->
-            @if (progress.scheduled === 0 && (selfDirected() || progress.own > 0)) {
+            <!-- A trainee's own workouts count too (TRN-033), on Max too; a program's sessions keep their count. -->
+            @if (progress.scheduled === 0 && (houseTrainee() || progress.own > 0)) {
               <span data-own-week i18n>{progress.own, plural,
                 =0 {No workouts yet}
                 =1 {1 workout done}
@@ -126,7 +126,7 @@
                       =1 {1 workout done}
                       other {{{ item.ownCompleted }} workouts done}
                     }</ng-container>
-                  } @else if (selfDirected()) {
+                  } @else if (houseTrainee()) {
                     <ng-container i18n>No workout</ng-container>
                   } @else {
                     <ng-container i18n>No session</ng-container>
@@ -454,6 +454,22 @@
                 <a class="text-link" routerLink="/training/pool" data-browse-pool i18n
                   >Browse exercises</a
                 >
+                @if (coachedByTheHouse()) {
+                  <!-- Max coaches them (N9c5b): their coach's line under their own workouts, as a coach's
+                       client reads it, and the one link to write to them. -->
+                  @if (waitingForCoach()) {
+                    <p class="hint" data-max-coach data-waiting-coach i18n>
+                      Your coaching space will give you a new coach, who will put your program here.
+                    </p>
+                  } @else {
+                    <p class="hint" data-max-coach i18n>Your coach will put your program here.</p>
+                  }
+                  @if (canMessage()) {
+                    <a class="text-link" routerLink="/messages" data-max-message i18n
+                      >Message your coach</a
+                    >
+                  }
+                }
               } @else if (selfDirected()) {
                 <!-- Training is closed to the trainee: nothing to start, a line true for them. -->
                 <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>

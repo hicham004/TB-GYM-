@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 import type { CoachingProductView, ProductCatalog } from '../src/app/core/api/generated';
+import { maxProduct } from '../src/testing/max-staff-fixtures';
 import { atlasCatalog, offer } from '../src/testing/product-fixtures';
 import {
   expect,
@@ -15,11 +16,18 @@ import {
 
 test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/commercial\//] } });
 
+interface PlansOptions {
+  /** What the coach sells; the Atlas catalog when left out. */
+  readonly catalog?: ProductCatalog;
+  /** More answers, or other ones, for the page's requests. */
+  readonly extra?: Record<string, (route: Route) => unknown>;
+}
+
 /** Plans you sell (C8, R5.1a) on the Atlas catalog, with the writes answered in place. */
-async function openPlans(page: Page, width: number, dark = false) {
+async function openPlans(page: Page, width: number, dark = false, options: PlansOptions = {}) {
   await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
   await page.setViewportSize({ width, height: 900 });
-  let catalog: ProductCatalog = atlasCatalog();
+  let catalog: ProductCatalog = options.catalog ?? atlasCatalog();
   const requests: unknown[] = [];
   let csrfReads = 0;
   const online = () => catalog.products[0];
@@ -63,6 +71,7 @@ async function openPlans(page: Page, width: number, dark = false) {
           }),
         );
       },
+      ...options.extra,
     },
   });
   await page.goto('/products');
@@ -178,3 +187,119 @@ for (const width of [390, 1440]) {
     await axe(page);
   });
 }
+
+/** The house's Max plan (notes plan N9c5a): every price option covers its four, and only them. */
+test.describe('the house’s Max plan', () => {
+  test.use({ allowedConsoleErrors: { patterns: [/status of 400 .*\/api\/commercial\//] } });
+  const LINE = 'A Max plan covers Training, Nutrition, Check-ins and Messaging, all four.';
+  const houseCatalog = (): ProductCatalog => ({
+    ...atlasCatalog(),
+    products: [maxProduct(), ...atlasCatalog().products],
+  });
+  const MAX_BOXES = [
+    ['Training', true],
+    ['Nutrition', true],
+    ['Check-ins', true],
+    ['Messaging', true],
+    ['Resources', false],
+  ] as const;
+
+  for (const width of [390, 1440]) {
+    test(`Add price option on Max at ${width}px locks its four, and sends exactly them`, async ({
+      page,
+    }) => {
+      const sent: unknown[] = [];
+      await openPlans(page, width, false, {
+        catalog: houseCatalog(),
+        extra: {
+          'POST /api/commercial/products/p-max/offers': (route) => {
+            sent.push(route.request().postDataJSON());
+            return json(route, 200, maxProduct());
+          },
+        },
+      });
+      await page
+        .locator('.plans > .cards > .card', { hasText: 'Max coaching' })
+        .getByRole('button', { name: 'Add price option' })
+        .click();
+      const sheet = page.getByRole('dialog', { name: 'New price option' });
+      for (const [name, ticked] of MAX_BOXES) {
+        const box = sheet.getByRole('checkbox', { name, exact: true });
+        await expect(box).toBeDisabled();
+        if (ticked) await expect(box).toBeChecked();
+        else await expect(box).not.toBeChecked();
+      }
+      await expect(sheet.locator('#plan-features-max')).toHaveText(LINE);
+      await expect(sheet.locator('fieldset.features')).toHaveAttribute(
+        'aria-describedby',
+        'plan-features-max',
+      );
+      await sheet.getByLabel('Length in weeks').fill('8');
+      await sheet.getByLabel('Price', { exact: true }).fill('220');
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({ path: test.info().outputPath(`n9c5b-max-option-${width}.png`) });
+
+      await sheet.getByRole('button', { name: 'Add price option' }).click();
+      await expect(sheet).toHaveCount(0);
+      expect(sent).toEqual([
+        {
+          label: '8 weeks',
+          durationCount: 8,
+          durationUnit: 'Week',
+          priceAmount: 220,
+          priceCurrency: 'USD',
+          features: ['Training', 'Nutrition', 'CheckIns', 'Messaging'].map((feature) => ({
+            feature,
+            allowsConcurrentCoverage: false,
+          })),
+        },
+      ]);
+    });
+  }
+
+  test('a Max option refused for what it includes says the server’s sentence under What’s included', async ({
+    page,
+  }) => {
+    await openPlans(page, 390, true, {
+      catalog: houseCatalog(),
+      extra: {
+        'POST /api/commercial/products/p-max/offers': (route) =>
+          json(route, 400, {
+            title: 'One or more validation errors occurred.',
+            status: 400,
+            errors: { offer: [LINE] },
+          }),
+      },
+    });
+    await page
+      .locator('.plans > .cards > .card', { hasText: 'Max coaching' })
+      .getByRole('button', { name: 'Add price option' })
+      .click();
+    const sheet = page.getByRole('dialog', { name: 'New price option' });
+    await sheet.getByLabel('Price', { exact: true }).fill('120');
+    await sheet.getByRole('button', { name: 'Add price option' }).click();
+
+    await expect(sheet.locator('#plan-features-error')).toHaveText(LINE);
+    await expect(sheet.locator('fieldset.features')).toHaveAttribute(
+      'aria-describedby',
+      'plan-features-max plan-features-error',
+    );
+    await expect(sheet.getByRole('alert')).toHaveText('Check the fields marked above.');
+    await expect(sheet.getByLabel('Price', { exact: true })).toHaveValue('120');
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+  });
+
+  test('any other plan’s boxes stay free beside Max', async ({ page }) => {
+    await openPlans(page, 1440, false, { catalog: houseCatalog() });
+    await page
+      .locator('.plans > .cards > .card', { hasText: 'Online Coaching' })
+      .getByRole('button', { name: 'Add price option' })
+      .click();
+    const sheet = page.getByRole('dialog', { name: 'New price option' });
+    await expect(sheet.getByRole('checkbox', { name: 'Resources', exact: true })).toBeEnabled();
+    await expect(sheet.locator('#plan-features-max')).toHaveCount(0);
+  });
+});

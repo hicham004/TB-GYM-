@@ -284,6 +284,132 @@ describe('ClientIntake (the coach’s view)', () => {
     expect(api['updateClientIntake']).not.toHaveBeenCalled();
   });
 
+  describe('a trainee of TB Gym’s own space off Max, whose Health step is closed (N9c5a)', () => {
+    const closedView = (overrides: Parameters<typeof finishedProfile>[0] = {}) =>
+      ({ ...coachView(finishedProfile(overrides)), healthStepOpen: false }) as CoachClientDetails;
+
+    it('reads the saved health answers with no Edit and the line on why', async () => {
+      const { host } = await render(closedView());
+
+      expect(Array.from(host.querySelectorAll('.panel-head h2')).map(textOf)).toEqual([
+        'About Rana',
+        'Rana’s goal',
+        'Rana’s day and food',
+        'Rana’s health',
+      ]);
+      expect(host.querySelectorAll('[data-edit]')).toHaveLength(3);
+      expect(host.querySelector('[data-edit="health"]')).toBeNull();
+      expect(textOf(host.querySelector('[data-health-closed]'))).toBe(
+        'Health answers open on Max, TB Gym’s coaching, so these can’t be changed now.',
+      );
+      expect(textOf(host)).toContain('Peanuts');
+    });
+
+    it('leaves the Health card out when nothing is saved', async () => {
+      const { host } = await render(
+        closedView({ allergies: null, medications: null, previousInjuries: null }),
+      );
+
+      expect(Array.from(host.querySelectorAll('.panel-head h2')).map(textOf)).toEqual([
+        'About Rana',
+        'Rana’s goal',
+        'Rana’s day and food',
+      ]);
+      expect(host.querySelectorAll('[data-edit]')).toHaveLength(3);
+    });
+
+    it('saves another group with the health answers sent back as they are', async () => {
+      const { fixture, host, api } = await render(closedView());
+
+      edit(host, 'life');
+      await settle(fixture);
+      fill(dialog()!, 'Work (optional)', 'Pilot');
+      await settle(fixture);
+      press(dialog()!, 'Save changes');
+      await settle(fixture);
+
+      expect(api['updateClientIntake']).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({
+          workType: 'Pilot',
+          allergies: 'Peanuts',
+          medications: null,
+          previousInjuries: 'Left knee, 2023',
+        }),
+      );
+    });
+
+    it('says why in the client’s name when Max ends under the health sheet, and reads the client again', async () => {
+      const refusal = new HttpErrorResponse({
+        status: 409,
+        error: {
+          code: 'health_step_closed',
+          message:
+            "Health answers open on Max, TB Gym's coaching. Your other answers can still be saved.",
+        },
+      });
+      const fresh = { ...coachView(), healthStepOpen: false, version: 12 } as CoachClientDetails;
+      const updateClientIntake = vi.fn(() => throwError(() => refusal));
+      const getClient = vi.fn(() => of(fresh));
+      const { fixture, host, context } = await render(coachView(), {
+        updateClientIntake,
+        getClient,
+      });
+
+      // jsdom's click does not focus: focus the Edit as a person's press would, so the sheet has it to give back.
+      host.querySelector<HTMLButtonElement>('[data-edit="health"]')!.focus();
+      edit(host, 'health');
+      await settle(fixture);
+      const sheet = dialog()!;
+      fill(sheet, 'Allergies (optional)', 'Shellfish');
+      await settle(fixture);
+      press(sheet, 'Save changes');
+      await settle(fixture);
+
+      expect(textOf(formSummary(sheet))).toBe(
+        'Health answers open on Max, TB Gym’s coaching. Rana’s other answers can still be saved.',
+      );
+      expect(getClient).toHaveBeenCalledWith('client-1');
+      expect(context.profile()?.healthStepOpen).toBe(false);
+      expect(context.profile()?.version).toBe(12);
+      expect(host.querySelector('[data-edit="health"]')).toBeNull();
+
+      press(sheet, 'Save changes');
+      await settle(fixture);
+      expect(updateClientIntake).toHaveBeenCalledTimes(1);
+      press(sheet, 'Not now');
+      await settle(fixture);
+      expect(dialog()).toBeNull();
+      // The Edit it came from is gone: focus goes to the Health card's heading, not to the page's body.
+      expect(document.activeElement).not.toBe(document.body);
+      expect(document.activeElement).toBe(host.querySelector('#intake-health'));
+      expect(host.querySelector('.panel-head h2:focus')).toBe(document.activeElement);
+    });
+
+    it('keeps the page as it is when the second read fails, and still says why', async () => {
+      const refusal = new HttpErrorResponse({
+        status: 409,
+        error: { code: 'health_step_closed', message: 'Refused.' },
+      });
+      const { fixture, host, context } = await render(coachView(), {
+        updateClientIntake: vi.fn(() => throwError(() => refusal)),
+        getClient: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
+      });
+
+      edit(host, 'health');
+      await settle(fixture);
+      fill(dialog()!, 'Allergies (optional)', 'Shellfish');
+      await settle(fixture);
+      press(dialog()!, 'Save changes');
+      await settle(fixture);
+
+      expect(textOf(formSummary(dialog()!))).toBe(
+        'Health answers open on Max, TB Gym’s coaching. Rana’s other answers can still be saved.',
+      );
+      expect(context.profile()?.healthStepOpen).toBe(true);
+    });
+  });
+
   it('drops a late answer when the workspace changes while a change is being saved', async () => {
     const late = new Subject<CoachClientDetails>();
     const { fixture, host, context, tenantId } = await render(coachView(), {

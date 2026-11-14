@@ -23,13 +23,17 @@ import { Icon } from '../../ui/icon';
 import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { IntakeFields } from './intake-fields';
 import {
+  followSaved,
   hasChanges,
+  healthClosedRefusal,
+  healthOpen,
   healthPrivacy,
   mergeSteps,
   stepErrors,
   toCompleteRequest,
   toUpdateRequest,
   valuesFromProfile,
+  withSavedHealth,
   type IntakeSaver,
   type IntakeStepId,
   type IntakeSubject,
@@ -162,7 +166,19 @@ export class IntakeEdit {
   private readonly saved = computed(() =>
     valuesFromProfile(this.profile(), { today: this.today(), weightUnit: this.weightUnit() }),
   );
-  protected readonly values = linkedSignal<IntakeValues>(() => this.saved());
+  /** What is in the boxes: a profile read again under the sheet keeps what the person typed. */
+  protected readonly values = linkedSignal<IntakeValues, IntakeValues>({
+    source: this.saved,
+    computation: (saved, previous) =>
+      previous ? followSaved(previous.value, previous.source, saved) : saved,
+  });
+  /**
+   * The health sheet of a profile whose Health step has closed under it (N9c5a): nothing typed in it
+   * can be saved, so it sends nothing and holds nothing to lose.
+   */
+  private readonly healthClosed = computed(
+    () => this.step() === 'health' && !healthOpen(this.profile()),
+  );
 
   /**
    * The date of birth, height and a goal are asked for once a profile is finished; a coach filling in
@@ -184,11 +200,21 @@ export class IntakeEdit {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => (this.destroyed = true));
-    effect(() => this.dirtyChange.emit(hasChanges(this.values(), this.saved(), [this.step()])));
+    effect(() =>
+      this.dirtyChange.emit(
+        !this.healthClosed() && hasChanges(this.values(), this.saved(), [this.step()]),
+      ),
+    );
   }
 
   protected async submit(): Promise<void> {
     if (this.busy()) return;
+    // The read already says the server refuses a health answer now: say so again, send nothing.
+    if (this.healthClosed()) {
+      this.refusal.set(healthClosedRefusal(this.subject()));
+      this.summary().focus();
+      return;
+    }
     if (this.problemCount() > 0) {
       this.refusal.set(null);
       this.attempt.attempt();
@@ -199,7 +225,11 @@ export class IntakeEdit {
       return;
     }
 
-    const sent = mergeSteps(this.saved(), this.values(), [this.step()]);
+    const sent = withSavedHealth(
+      mergeSteps(this.saved(), this.values(), [this.step()]),
+      this.saved(),
+      this.profile(),
+    );
     const version = this.profile().version;
     this.busy.set(true);
     this.refusal.set(null);

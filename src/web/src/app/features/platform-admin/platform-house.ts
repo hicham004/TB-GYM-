@@ -187,7 +187,9 @@ export class PlatformHouse extends GuardedSheets {
           ? emptiedWords(saved.setting, label)
           : saved.setting === 'SignUpsPerWeek' && Number(saved.value) === 0
             ? $localize`${label}:setting: is now ${shown}:value:, so sign-up is closed.`
-            : $localize`${label}:setting: is now ${shown}:value:.`,
+            : saved.setting === 'MaxPlaces' && Number(saved.value) === 0
+              ? $localize`${label}:setting: is now ${shown}:value:, so Max is closed.`
+              : $localize`${label}:setting: is now ${shown}:value:.`,
       );
       return;
     }
@@ -197,7 +199,8 @@ export class PlatformHouse extends GuardedSheets {
 
 /**
  * What emptying a setting does, in the toast: sign-up closes, Free's Progress has no limit, the platform's
- * room, or asks for a paid plan close. A case for every setting, so a new one does not compile without its own.
+ * room, asks for a paid plan close, or Max closes (N9c5a). A case for every setting, so a new one does not
+ * compile without its own.
  */
 function emptiedWords(setting: HouseSetting, label: string): string {
   switch (setting) {
@@ -210,5 +213,7 @@ function emptiedWords(setting: HouseSetting, label: string): string {
       return $localize`${label}:setting: is now empty, so the house has the platform’s allowance.`;
     case 'WhishNumber':
       return $localize`${label}:setting: is now empty, so asks for a paid plan are closed.`;
+    case 'MaxPlaces':
+      return $localize`${label}:setting: is now empty, so Max is closed.`;
   }
 }

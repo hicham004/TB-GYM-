@@ -1534,6 +1534,9 @@ function toSelfProfile(value: ContractClientSelfProfile): ClientSelfProfile {
     heightEnteredValue: toNullableNumber(value.heightEnteredValue),
     averageDailySteps: toNullableNumber(value.averageDailySteps),
     version: toNumber(value.version),
+    // The server always sends both; a missing value (an older answer or a test double) reads as before N9c5a.
+    healthStepOpen: value.healthStepOpen !== false,
+    coachedByTheHouse: value.coachedByTheHouse === true,
   };
 }
 
@@ -1547,6 +1550,7 @@ export function toCoachClient(value: ContractCoachClientDetails): CoachClientDet
     release: value.release ?? null,
     // The server always sends it; a missing value (an older answer or a test double) reads as the old rule.
     mayCoach: value.mayCoach !== false,
+    healthStepOpen: value.healthStepOpen !== false,
   };
 }
 

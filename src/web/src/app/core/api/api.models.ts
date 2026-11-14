@@ -178,6 +178,12 @@ export interface ClientIntakeProfile {
   onboardingStatus: ClientOnboardingStatus;
   onboardingCompletedAtUtc: string | null;
   version: number;
+  /**
+   * Whether the intake's Health step is open (CLI-028, N9c5a): false only for a trainee of TB Gym's own space who is
+   * not on Max. While false the server refuses an added or changed health answer (409 `health_step_closed`); one kept
+   * as it is passes, so the web never offers the step and never sends saved answers emptied.
+   */
+  healthStepOpen: boolean;
 }
 
 export interface CoachClientDetails extends ClientIntakeProfile {
@@ -222,6 +228,11 @@ export interface FormerClient {
 /** The client's own profile; `selfDirected` marks a trainee of TB Gym's own space (CLI-026). */
 export interface ClientSelfProfile extends ClientIntakeProfile {
   selfDirected?: boolean;
+  /**
+   * A trainee of TB Gym's own space whom Max coaches today (CLI-014, N9c5a): their coach card, Messages and check-ins
+   * read as a coach's client's do, while `selfDirected` still says they are the house's.
+   */
+  coachedByTheHouse?: boolean;
 }
 
 export interface ProductCatalog {
@@ -238,6 +249,8 @@ export interface CoachingProduct {
   version: number;
   /** A coaching plan, or a session pack whose options count sessions (ADR 0038). */
   kind?: 'CoachingPlan' | 'SessionPack';
+  /** The house's tier of the plan (SUB-019): Free, Pro+ or Max; null outside the house's own plans. */
+  houseTier?: ContractHouseTier | null;
 }
 
 export interface ProductOffer {

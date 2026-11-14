@@ -10,7 +10,7 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
-import { fill, formSummary, press, settle, type } from '../../../testing/dom';
+import { field, fill, formSummary, press, settle, type } from '../../../testing/dom';
 import {
   finishedProfile,
   halfwayProfile,
@@ -389,6 +389,263 @@ describe('ClientProfilePage', () => {
     expect(dialog()).not.toBeNull();
     press(dialog()!, 'Leave without saving');
     expect(await pending).toBe(true);
+  });
+
+  describe('a trainee of TB Gym’s own space off Max, whose Health step is closed (N9c5a)', () => {
+    const offMax = { selfDirected: true, healthStepOpen: false } as const;
+    const nothingSaved = { allergies: null, medications: null, previousInjuries: null };
+    const closedRefusal = () =>
+      new HttpErrorResponse({
+        status: 409,
+        error: {
+          code: 'health_step_closed',
+          message:
+            "Health answers open on Max, TB Gym's coaching. Your other answers can still be saved.",
+        },
+      });
+    const progressNames = (host: HTMLElement) =>
+      Array.from(host.querySelectorAll('.progress .name')).map(textOf);
+
+    it('answers four steps, without Health, each carrying the saved health answers as they are', async () => {
+      const { fixture, host, api } = await render(newProfile(offMax));
+
+      expect(textOf(host.querySelector('.kicker'))).toBe('Step 1 of 4');
+      expect(progressNames(host)).toEqual(['About you', 'Goal', 'Day and food', 'Weight']);
+      expect(host.querySelectorAll('.progress .item')).toHaveLength(4);
+
+      typeDate(host, '2', '4', '1996');
+      fill(host, 'Height', '168');
+      await settle(fixture);
+      press(host, 'Continue');
+      await settle(fixture);
+      expect(textOf(host.querySelector('.kicker'))).toBe('Step 2 of 4');
+      fill(host, 'Goals', 'Get stronger.');
+      await settle(fixture);
+      press(host, 'Continue');
+      await settle(fixture);
+      expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Your day and food');
+      expect(textOf(host.querySelector('.kicker'))).toBe('Step 3 of 4');
+      press(host, 'Continue');
+      await settle(fixture);
+
+      expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Where you start');
+      expect(textOf(host.querySelector('.kicker'))).toBe('Step 4 of 4');
+      expect(host.querySelector('.privacy')).toBeNull();
+      expect(api['updateSelfIntake']).toHaveBeenCalledTimes(3);
+      for (const [request] of api['updateSelfIntake'].mock.calls) {
+        expect(request).toMatchObject(nothingSaved);
+      }
+
+      press(host, 'Back');
+      await settle(fixture);
+      expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Your day and food');
+    });
+
+    it('picks up on Weight once Day and food is done, and sends answers saved on Max untouched', async () => {
+      const { fixture, host, api } = await render(
+        halfwayProfile({ ...offMax, workType: 'Teacher', medications: 'Ventolin' }),
+      );
+
+      expect(textOf(host.querySelector('.kicker'))).toBe('Step 4 of 4');
+      expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Where you start');
+      fill(host, 'Weight', '64');
+      await settle(fixture);
+      press(host, 'Finish setting up');
+      await settle(fixture);
+
+      expect(api['completeSelfOnboarding']).toHaveBeenCalledWith(
+        expect.objectContaining({
+          intake: expect.objectContaining({
+            allergies: null,
+            medications: 'Ventolin',
+            previousInjuries: null,
+          }),
+        }),
+      );
+    });
+
+    it('has all five steps again on Max', async () => {
+      const { host } = await render(
+        newProfile({ selfDirected: true, coachedByTheHouse: true, healthStepOpen: true }),
+      );
+
+      expect(textOf(host.querySelector('.kicker'))).toBe('Step 1 of 5');
+      expect(progressNames(host)).toEqual([
+        'About you',
+        'Goal',
+        'Day and food',
+        'Health',
+        'Weight',
+      ]);
+    });
+
+    it('leaves the Health card out with nothing saved', async () => {
+      const { host } = await render(finishedProfile({ ...offMax, ...nothingSaved }));
+
+      expect(Array.from(host.querySelectorAll('.panel-head h2')).map(textOf)).toEqual([
+        'About you',
+        'Your goal',
+        'Your day and food',
+      ]);
+      expect(host.querySelectorAll('[data-edit]')).toHaveLength(3);
+      expect(host.querySelector('[data-health-closed]')).toBeNull();
+    });
+
+    it('shows saved health answers to read, with no Edit and the line on why, and saves the rest as they are', async () => {
+      const { fixture, host, api } = await render(finishedProfile(offMax));
+
+      expect(Array.from(host.querySelectorAll('.panel-head h2')).map(textOf)).toEqual([
+        'About you',
+        'Your goal',
+        'Your day and food',
+        'Your health',
+      ]);
+      expect(host.querySelector('[data-edit="health"]')).toBeNull();
+      expect(host.querySelectorAll('[data-edit]')).toHaveLength(3);
+      expect(textOf(host.querySelector('[data-health-closed]'))).toBe(
+        'Health answers open on Max, TB Gym’s coaching, so these can’t be changed now.',
+      );
+      expect(textOf(host)).toContain('Peanuts');
+      expect(textOf(host)).toContain('Left knee, 2023');
+
+      (host.querySelector('[data-edit="goal"]') as HTMLButtonElement).click();
+      await settle(fixture);
+      fill(dialog()!, 'Goals', 'Squat my bodyweight.');
+      await settle(fixture);
+      press(dialog()!, 'Save changes');
+      await settle(fixture);
+
+      expect(api['updateSelfIntake']).toHaveBeenCalledWith(
+        expect.objectContaining({
+          goals: 'Squat my bodyweight.',
+          allergies: 'Peanuts',
+          medications: null,
+          previousInjuries: 'Left knee, 2023',
+        }),
+      );
+    });
+
+    it('moves on to Weight and says why when Max ends under the health step, and asks nothing on leaving', async () => {
+      const open = halfwayProfile({ selfDirected: true, workType: 'Teacher' });
+      const closed = { ...open, healthStepOpen: false };
+      const getSelfProfile = vi.fn().mockReturnValueOnce(of(open)).mockReturnValue(of(closed));
+      const { fixture, host, api, page } = await render(open, {
+        api: { getSelfProfile, updateSelfIntake: vi.fn(() => throwError(closedRefusal)) },
+      });
+
+      expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Your health');
+      fill(host, 'Allergies (optional)', 'Shellfish');
+      await settle(fixture);
+      press(host, 'Continue');
+      await settle(fixture);
+
+      expect(api['updateSelfIntake']).toHaveBeenCalledWith(
+        expect.objectContaining({ allergies: 'Shellfish' }),
+      );
+      expect(getSelfProfile).toHaveBeenCalledTimes(2);
+      expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Where you start');
+      expect(textOf(host.querySelector('.kicker'))).toBe('Step 4 of 4');
+      expect(progressNames(host)).not.toContain('Health');
+      expect(textOf(formSummary(host))).toBe(
+        'Health answers open on Max, TB Gym’s coaching. Your other answers can still be saved.',
+      );
+      expect(document.activeElement).toBe(formSummary(host));
+      // What was typed on the closed step can never be saved, so leaving asks nothing.
+      expect(await page.canLeave()).toBe(true);
+      expect(dialog()).toBeNull();
+
+      fill(host, 'Weight', '64');
+      await settle(fixture);
+      press(host, 'Finish setting up');
+      await settle(fixture);
+      expect(api['completeSelfOnboarding']).toHaveBeenCalledWith(
+        expect.objectContaining({ intake: expect.objectContaining({ allergies: null }) }),
+      );
+    });
+
+    it('keeps the health sheet open with the words when Max ends under it, closes its Edit, and sends nothing more', async () => {
+      const open = finishedProfile({ selfDirected: true });
+      const closed = { ...open, healthStepOpen: false };
+      const getSelfProfile = vi.fn().mockReturnValueOnce(of(open)).mockReturnValue(of(closed));
+      const updateSelfIntake = vi.fn(() => throwError(closedRefusal));
+      const { fixture, host } = await render(open, { api: { getSelfProfile, updateSelfIntake } });
+
+      // jsdom's click does not focus: focus the Edit as a person's press would, so the sheet has it to give back.
+      const editHealth = host.querySelector<HTMLButtonElement>('[data-edit="health"]')!;
+      editHealth.focus();
+      editHealth.click();
+      await settle(fixture);
+      const sheet = dialog()!;
+      fill(sheet, 'Allergies (optional)', 'Shellfish');
+      await settle(fixture);
+      press(sheet, 'Save changes');
+      await settle(fixture);
+
+      expect(updateSelfIntake).toHaveBeenCalledTimes(1);
+      expect(getSelfProfile).toHaveBeenCalledTimes(2);
+      expect(dialog()).toBe(sheet);
+      expect(textOf(formSummary(sheet))).toBe(
+        'Health answers open on Max, TB Gym’s coaching. Your other answers can still be saved.',
+      );
+      expect(document.activeElement).toBe(formSummary(sheet));
+      expect(host.querySelector('[data-edit="health"]')).toBeNull();
+      expect(textOf(host.querySelector('[data-health-closed]'))).toContain(
+        'so these can’t be changed now.',
+      );
+
+      // The read already says it is refused: Save changes says so again and sends nothing.
+      press(sheet, 'Save changes');
+      await settle(fixture);
+      expect(updateSelfIntake).toHaveBeenCalledTimes(1);
+      expect(textOf(formSummary(sheet))).toContain('Your other answers can still be saved.');
+
+      // Nothing in it can be saved, so Not now closes it without asking.
+      press(sheet, 'Not now');
+      await settle(fixture);
+      expect(dialog()).toBeNull();
+      expect(textOf(host)).toContain('Peanuts');
+      // The Edit it came from is gone: focus goes to the Health card's heading, not to the page's body.
+      expect(document.activeElement).not.toBe(document.body);
+      expect(document.activeElement).toBe(host.querySelector('#intake-health'));
+      expect(host.querySelector('.panel-head h2:focus')).toBe(document.activeElement);
+    });
+
+    it('moves on to Weight when Max ends between Day and food and the health step, and says why', async () => {
+      const onMax = halfwayProfile({ selfDirected: true, coachedByTheHouse: true });
+      const offMaxNow = { ...onMax, healthStepOpen: false };
+      const getSelfProfile = vi.fn().mockReturnValueOnce(of(onMax)).mockReturnValue(of(offMaxNow));
+      const updateSelfIntake = vi
+        .fn()
+        .mockImplementationOnce((request: { version: number }) =>
+          of({ ...onMax, version: request.version + 1 }),
+        )
+        .mockImplementation(() => throwError(closedRefusal));
+      const { fixture, host } = await render(onMax, {
+        api: { getSelfProfile, updateSelfIntake },
+      });
+
+      expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Your day and food');
+      press(host, 'Continue');
+      await settle(fixture);
+      expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Your health');
+      expect(textOf(host.querySelector('.kicker'))).toBe('Step 4 of 5');
+
+      fill(host, 'Allergies (optional)', 'Shellfish');
+      await settle(fixture);
+      press(host, 'Continue');
+      await settle(fixture);
+
+      expect(updateSelfIntake).toHaveBeenCalledTimes(2);
+      expect(getSelfProfile).toHaveBeenCalledTimes(2);
+      expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Where you start');
+      expect(textOf(host.querySelector('.kicker'))).toBe('Step 4 of 4');
+      expect(host.querySelectorAll('.progress .item.current')).toHaveLength(1);
+      expect(progressNames(host)).not.toContain('Health');
+      expect(() => field(host, 'Allergies (optional)')).toThrow('No field is labelled');
+      expect(textOf(formSummary(host))).toBe(
+        'Health answers open on Max, TB Gym’s coaching. Your other answers can still be saved.',
+      );
+    });
   });
 
   it('drops a late answer when the workspace changes while a step is being saved', async () => {

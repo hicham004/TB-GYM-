@@ -74,6 +74,8 @@ interface Closable {
  * Free, the page is also where they buy: the ask waiting on TB Gym first, then their paid plans, Free,
  * the plans TB Gym sells with "Ask for" on each option, and the asks TB Gym booked or closed. The
  * house's prices and words come from `GET /api/house-plans/me` alone; a coach's client never reads it.
+ * While every place on Max is taken (N9c5a), Max's options say an ask waits in line, and an ask waiting
+ * for its place shows neither where to send the money nor "I've paid" until the server says one is open.
  */
 @Component({
   selector: 'app-client-plan-page',
@@ -230,26 +232,38 @@ export class ClientPlanPage {
       // Asks already shown stay until the new read replaces them; only an empty part shows the skeleton.
       if (this.house() === null) this.houseState.set('loading');
       this.showHouse(await this.readHouse(owner));
+      // What just happened is out of date with the new read: "send the money" must not stay on an ask
+      // whose Max place has gone meanwhile (N9c5a); the card says where it stands now.
+      this.askNews.set(null);
     });
     this.keepFocus();
   }
 
   protected openAskSheet(group: HousePlanGroup, option: HouseOption): void {
-    this.choice.set({ planName: group.name, option });
+    this.choice.set({ planName: group.name, option, waitingForPlace: group.placeLine !== null });
     this.show(this.askSheet(), $localize`Ask for ${group.name}:plan:`);
   }
 
   protected openPaidSheet(ask: OpenAskCard): void {
+    // A Max ask with no place open has no "I've paid" to press: the server would refuse it (N9c5a).
+    if (ask.waitingForPlace) return;
     this.paying.set(ask);
     this.show(this.paidSheet(), $localize`I’ve paid`);
   }
 
-  /** The ask sheet closed: with the new ask, the card takes the top of the page and focus. */
+  /**
+   * The ask sheet closed: with the new ask, the card takes the top of the page and focus. Worded from the
+   * server's answer, not the option: asking again for the option already asked answers with that ask.
+   */
   protected asked(ask: HouseAsk | null, sheet: Closable): void {
     sheet.close();
     if (!ask) return;
     this.putAsk(ask);
-    this.askNews.set($localize`Asked. Send the money by Whish, then tell TB Gym here.`);
+    this.askNews.set(
+      ask.state === 'Asked' && ask.placeOpen === false
+        ? $localize`Asked. You’re in line for a place on Max; don’t send money until this page says one is open.`
+        : $localize`Asked. Send the money by Whish, then tell TB Gym here.`,
+    );
     this.focusAskNews();
   }
 

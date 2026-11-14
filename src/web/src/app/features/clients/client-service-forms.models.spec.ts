@@ -182,6 +182,20 @@ describe('the server’s refusals, in coach words', () => {
     expect(serviceWriteError(new Error('offline'), 'Fallback.', 'Maya')).toBe('Fallback.');
   });
 
+  it('says Max’s refusals in the server’s words, which are written for the staff (N9c5a)', () => {
+    const sentences = {
+      house_max_full: 'Every place on Max is taken. Book this ask once a place opens, or close it.',
+      house_max_closed:
+        "Max is closed: TB Gym's settings give it no places. Book this ask once Max opens again, or close it.",
+      house_max_by_ask: "Max is booked from the trainee's ask, so its places are kept.",
+    };
+    for (const [code, message] of Object.entries(sentences)) {
+      expect(say({ code, message }, 409)).toBe(message);
+      // Without its sentence, the screen's own words.
+      expect(say({ code }, 409)).toBe('Fallback.');
+    }
+  });
+
   it('keeps the authorized server explanation of the plan and dates that clash', () => {
     const message =
       'Maya already has Online Coaching from Tue 21 Jul 2026 to Mon 12 Oct 2026. Start after it ends.';

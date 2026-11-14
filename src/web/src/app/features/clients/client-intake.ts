@@ -10,7 +10,13 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { deviceToday, isoWeekdayOfName } from '../../ui/calendar';
 import { StatusLabel } from '../../ui/status-label';
 import { IntakeProfile } from '../intake/intake-profile';
-import type { IntakeOutcome, IntakeSaver, IntakeSubject } from '../intake/intake.models';
+import {
+  healthClosedRefusal,
+  isHealthStepClosed,
+  type IntakeOutcome,
+  type IntakeSaver,
+  type IntakeSubject,
+} from '../intake/intake.models';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
@@ -20,7 +26,8 @@ import { ClientWorkspaceContext } from './client-workspace.context';
  * server refuses their edits, so nothing here is editable for them either. A client who
  * has not finished setting up shows what is still needed and a Finish setting up for their starting
  * weight. Every write is this page's own workspace's: if the coach switches workspace while one is on
- * its way, the answer is dropped, never shown on another client.
+ * its way, the answer is dropped, never shown on another client. A trainee of TB Gym's own space off
+ * Max has their Health step closed (N9c5a, the client's `healthStepOpen`): its card is read, not edited.
  */
 @Component({
   selector: 'app-client-intake',
@@ -144,6 +151,17 @@ export class ClientIntake {
           return { ok: true };
         } catch (error) {
           if (!owner.current) return { ok: false, message: '' };
+          if (isHealthStepClosed(error)) {
+            // The client's Health step closed since the page read it (their Max ended, N9c5a): read
+            // the client again, without reloading the record, so the step's Edit closes.
+            const name = this.context.profile()?.firstName ?? '';
+            const fresh = await firstValueFrom(this.api.getClient(this.context.clientId())).catch(
+              () => null,
+            );
+            if (!owner.current) return { ok: false, message: '' };
+            if (fresh) this.context.setProfile(fresh);
+            return { ok: false, message: healthClosedRefusal({ kind: 'client', name }) };
+          }
           return { ok: false, message: apiErrorMessage(error, fallback) };
         }
       },

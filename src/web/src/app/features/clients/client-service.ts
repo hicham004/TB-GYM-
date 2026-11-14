@@ -231,7 +231,10 @@ export class ClientService extends GuardedSheets {
   /** The trainee's asks, newest first; none for any other client. */
   protected readonly askRows = computed(() => {
     const read = this.asks();
-    return read.kind === 'ready' ? askRows(read.asks, this.serviceContext()) : [];
+    // A former trainee has left Max's line (N9c5a), so their asks say nothing of a place.
+    return read.kind === 'ready'
+      ? askRows(read.asks, { ...this.serviceContext(), former: this.context.isFormer() })
+      : [];
   });
   protected readonly asksFailed = computed(() => this.asks().kind === 'failed');
 
@@ -358,7 +361,11 @@ export class ClientService extends GuardedSheets {
         const plan = this.plans().find((item) => item.id === (pay ?? renew));
         if (!plan) return;
         this.picked.set(plan.id);
-        if (!pay) return this.openRenew(plan);
+        if (!pay) {
+          // Max is booked from the trainee's ask alone (N9c5a): its card's Manage plan says so instead.
+          if (plan.houseTier !== 'Max') this.openRenew(plan);
+          return;
+        }
         // Shown either way; the sheet only while the plan still waits for the payment.
         const card = this.card();
         if (card?.canPay) this.openPayment(card);

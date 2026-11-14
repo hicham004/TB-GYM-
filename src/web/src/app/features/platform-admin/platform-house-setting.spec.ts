@@ -590,6 +590,103 @@ describe('Changing one of the house’s settings (notes plan N9a2)', () => {
     });
   });
 
+  describe('Max’s places, trainees on Max at a time (notes plan N9c5b)', () => {
+    const LABEL = 'Trainees on Max at a time';
+    const REASON = 'Enter a whole number from 0 to 1,000, or leave it empty.';
+    /** Never set: Max is built switched off (N9c5a). */
+    const NEVER_SET = toHouseSetting(
+      houseSetting({
+        setting: 'MaxPlaces',
+        value: null,
+        version: 0,
+        changedAtUtc: null,
+        changedByUserId: null,
+        changedByName: null,
+      }),
+    );
+    const SIX = toHouseSetting(houseSetting({ setting: 'MaxPlaces', value: '6', version: 1 }));
+
+    it('edits a whole number from 0 to 1,000, and says what empty and 0 do', async () => {
+      const { host } = await render({ start: NEVER_SET });
+
+      expect(textOf(host.querySelector('[data-in-force]'))).toBe('In force now: Empty · Never set');
+      const input = field(host, LABEL);
+      expect(input).toBe(box(host));
+      expect(input.value).toBe('');
+      expect(input.type).toBe('number');
+      expect(input.getAttribute('min')).toBe('0');
+      expect(input.getAttribute('max')).toBe('1000');
+      expect(support(host)).toBe(
+        'A whole number from 0 to 1,000. Empty or 0 keeps Max closed. A booked Max plan keeps its place until it ends.',
+      );
+    });
+
+    it('takes 0, 1,000 and empty at the version in force', async () => {
+      for (const [start, typed, sent] of [
+        [NEVER_SET, '6', '6'],
+        [NEVER_SET, '0', '0'],
+        [NEVER_SET, '1000', '1000'],
+        [SIX, '', null],
+      ] as const) {
+        const { fixture, host, api, closed } = await render({ start });
+        fill(host, LABEL, typed);
+        await settle(fixture);
+        press(host, 'Save');
+        await settle(fixture);
+
+        expect(api.changeSetting).toHaveBeenCalledWith('MaxPlaces', sent, start.version);
+        expect(closed[0]).toMatchObject({ setting: 'MaxPlaces', value: sent });
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('refuses more than 1,000, a negative or a part number before sending, and says why', async () => {
+      for (const typed of ['1001', '-1', '2.5']) {
+        const { fixture, host, api, closed } = await render({ start: NEVER_SET });
+
+        fill(host, LABEL, typed);
+        await settle(fixture);
+        press(host, 'Save');
+        await settle(fixture);
+
+        expect(api.changeSetting, typed).not.toHaveBeenCalled();
+        expect(errorUnder(host)).toBe(REASON);
+        expect(box(host).getAttribute('aria-invalid')).toBe('true');
+        expect(document.activeElement).toBe(box(host));
+        expect(closed).toEqual([]);
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('shows the server’s sentence under the box when it refuses the number', async () => {
+      const sentence =
+        'Enter a whole number of places from 0 to 1,000, or leave it empty. Empty or 0 keeps Max closed.';
+      const { fixture, host, closed } = await render(
+        { start: NEVER_SET },
+        {
+          changeSetting: vi.fn(() =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 400,
+                  error: { title: 'One or more errors.', errors: { value: [sentence] } },
+                }),
+            ),
+          ),
+        },
+      );
+
+      fill(host, LABEL, '7');
+      await settle(fixture);
+      press(host, 'Save');
+      await settle(fixture);
+
+      expect(errorUnder(host)).toBe(sentence);
+      expect(box(host).getAttribute('aria-invalid')).toBe('true');
+      expect(closed).toEqual([]);
+    });
+  });
+
   describe('the house’s Whish number (notes plan N9c2)', () => {
     it('edits it in a text box for a phone’s number pad, left to right, as long as the server keeps', async () => {
       const { host, dirty } = await render({ start: WHISH });

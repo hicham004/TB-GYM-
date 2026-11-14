@@ -52,7 +52,9 @@ import {
   clientSeesOptions,
   defaultStartDate,
   exercisesNeedingMax,
+  freeAloneLine,
   maxRow,
+  onFreeAlone,
   planChoices,
   PROGRAM_NAME_LIMIT,
   programChoices,
@@ -106,10 +108,14 @@ import {
         }
         @default {
           @if (plans().length === 0) {
-            <p class="notice" dir="auto" i18n>
-              {{ firstName() }} has no plan that includes training, so there is nothing to assign
-              yet. Add one under Service &amp; access.
-            </p>
+            @if (freeAlone()) {
+              <p class="notice" dir="auto">{{ freeAloneText() }}</p>
+            } @else {
+              <p class="notice" dir="auto" i18n>
+                {{ firstName() }} has no plan that includes training, so there is nothing to assign
+                yet. Add one under Service &amp; access.
+              </p>
+            }
           } @else {
             @if (plans().length > 1) {
               <app-select
@@ -594,6 +600,9 @@ export class ProgramAssign {
     isoWeekdayOfName(this.record?.workspace()?.weekStartsOn),
   );
   protected readonly plans = computed(() => planChoices(this.enrollments(), this.locale));
+  /** Free alone covers training: the trainee's own workouts, never a program (N9c5a). */
+  protected readonly freeAlone = computed(() => onFreeAlone(this.enrollments()));
+  protected readonly freeAloneText = computed(() => freeAloneLine(this.firstName()));
   protected readonly programs = computed(() => programChoices(this.templates()));
   protected readonly planOptions = computed<SelectOption[]>(() =>
     this.plans().map((plan) => ({ value: plan.id, label: plan.label })),

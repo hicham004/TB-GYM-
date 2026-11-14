@@ -529,6 +529,120 @@ describe('House, the platform admin’s page (notes plan N9a2)', () => {
       });
     });
 
+    describe('Max’s places, trainees on Max at a time (notes plan N9c5b)', () => {
+      const LABEL = 'Trainees on Max at a time';
+      const CHANGE = 'Change the number of trainees on Max at a time';
+      /** Every setting, Max's last as the server lists it: never set unless a test says otherwise. */
+      const withMax =
+        (value: string | null = null, version = 0) =>
+        (): HouseAdminView => {
+          const house = houseWithEverySetting();
+          return {
+            ...house,
+            settings: [
+              ...house.settings,
+              houseSetting({
+                setting: 'MaxPlaces',
+                value,
+                version,
+                ...(version === 0
+                  ? { changedAtUtc: null, changedByUserId: null, changedByName: null }
+                  : {}),
+              }),
+            ],
+          };
+        };
+
+      it('lists it last, Empty and Never set while built switched off, with a Change named for it', async () => {
+        const { host } = await render({}, withMax());
+
+        expect(settingRows(host)).toHaveLength(6);
+        expect(settingRows(host)[5]).toEqual(['MaxPlaces', LABEL, 'Empty', 'Never set', CHANGE]);
+        // Its name is never the week's sign-up places.
+        expect(settingRows(host)[5][1]).not.toMatch(/place/i);
+      });
+
+      it('lists a saved number as a plain count, with who set it', async () => {
+        const { host } = await render({}, withMax('6', 1));
+
+        expect(settingRows(host)[5]).toEqual([
+          'MaxPlaces',
+          LABEL,
+          '6',
+          'Changed by Samir Aoun on Fri 9 Oct',
+          CHANGE,
+        ]);
+      });
+
+      it('saves a number of trainees at the version read, and says so', async () => {
+        const { fixture, host, api } = await render({}, withMax());
+
+        const sheet = await openChange(fixture, host, 'MaxPlaces');
+        expect(titleOf(sheet)).toBe(CHANGE);
+        expect(textOf(sheet.querySelector('[data-in-force]'))).toBe(
+          'In force now: Empty · Never set',
+        );
+        expect(textOf(sheet)).toContain(
+          'A whole number from 0 to 1,000. Empty or 0 keeps Max closed. A booked Max plan keeps its place until it ends.',
+        );
+        fill(sheet, LABEL, '6');
+        // The read after the save finds the number the server kept.
+        api.getHouse.mockReturnValue(of(toHouseAdmin(withMax('6', 1)())));
+        await settle(fixture);
+        press(sheet, 'Save');
+        await settle(fixture);
+
+        expect(api.changeSetting).toHaveBeenCalledWith('MaxPlaces', '6', 0);
+        expect(overlays()).toEqual([]);
+        expect(toast()).toContain('Trainees on Max at a time is now 6.');
+        expect(toast()).not.toContain('closed');
+        expect(textOf(query(host, 'li[data-setting="MaxPlaces"] [data-value]'))).toBe('6');
+      });
+
+      it('says Max is closed when it is set to 0, never that sign-up closes', async () => {
+        const { fixture, host, api } = await render({}, withMax('6', 1));
+
+        const sheet = await openChange(fixture, host, 'MaxPlaces');
+        fill(sheet, LABEL, '0');
+        await settle(fixture);
+        press(sheet, 'Save');
+        await settle(fixture);
+
+        expect(api.changeSetting).toHaveBeenCalledWith('MaxPlaces', '0', 1);
+        expect(toast()).toContain('Trainees on Max at a time is now 0, so Max is closed.');
+        expect(toast()).not.toContain('sign-up is closed');
+      });
+
+      it('says Max is closed when it is emptied, never that sign-up closes', async () => {
+        const { fixture, host, api } = await render({}, withMax('6', 1));
+
+        const sheet = await openChange(fixture, host, 'MaxPlaces');
+        fill(sheet, LABEL, '');
+        api.getHouse.mockReturnValue(of(toHouseAdmin(withMax(null, 2)())));
+        await settle(fixture);
+        press(sheet, 'Save');
+        await settle(fixture);
+
+        expect(api.changeSetting).toHaveBeenCalledWith('MaxPlaces', null, 1);
+        expect(toast()).toContain('Trainees on Max at a time is now empty, so Max is closed.');
+        expect(toast()).not.toContain('sign-up is closed');
+        expect(textOf(query(host, 'li[data-setting="MaxPlaces"] [data-value]'))).toBe('Empty');
+      });
+
+      it('leaves sign-up’s own 0 as it was', async () => {
+        const { fixture, host } = await render({}, withMax('6', 1));
+
+        const sheet = await openChange(fixture, host, 'SignUpsPerWeek');
+        fill(sheet, 'New sign-ups a week', '0');
+        await settle(fixture);
+        press(sheet, 'Save');
+        await settle(fixture);
+
+        expect(toast()).toContain('New sign-ups a week is now 0, so sign-up is closed.');
+        expect(toast()).not.toContain('Max');
+      });
+    });
+
     it('says sign-up is closed when new sign-ups a week is set to 0', async () => {
       const { fixture, host } = await render();
 

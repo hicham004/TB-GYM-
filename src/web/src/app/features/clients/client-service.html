@@ -119,6 +119,9 @@
                     </span>
                     <app-status-pill [label]="ask.pill.label" [tone]="ask.pill.tone" />
                   </div>
+                  @if (ask.place; as place) {
+                    <p class="ask-line" dir="auto" data-place>{{ place }}</p>
+                  }
                   @if (ask.sent; as sent) {
                     @if (sent.name && sent.number) {
                       <p class="ask-line" data-sent i18n>

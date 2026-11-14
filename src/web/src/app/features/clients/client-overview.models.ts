@@ -132,7 +132,8 @@ export interface RenewalPrompt {
 
 /**
  * Offer a renewal while the server flags the active plan ending soon ({@link PlanEnding}) and nothing
- * already follows it: no renewal of it, and no other live plan starting when it ends.
+ * already follows it: no renewal of it, and no other live plan starting when it ends. Never for Max, which is
+ * booked from the trainee's ask alone (N9c5a, `house_max_by_ask`).
  */
 export function renewalPrompt(
   enrollments: readonly ClientEnrollment[],
@@ -146,7 +147,7 @@ export function renewalPrompt(
       covers(item, today) &&
       item.lastActiveDate === ending?.lastDay,
   );
-  if (!current) return null;
+  if (!current || current.houseTier === 'Max') return null;
   const daysLeft = daysBetween(today, current.lastActiveDate);
   if (daysLeft < 0) return null;
   const followed = enrollments.some(

@@ -85,7 +85,12 @@
           <span class="row-icon"><app-icon name="user" /></span>
           <span class="row-text">
             <strong i18n>My profile</strong><span class="tb-visually-hidden">, </span>
-            <small i18n>Your goals, health details and contact info</small>
+            <!-- Health answers open on Max alone for a trainee of the house (N9c5a). -->
+            @if (healthStepOpen()) {
+              <small i18n>Your goals, health details and contact info</small>
+            } @else {
+              <small i18n>Your goals and contact info</small>
+            }
           </span>
           <app-icon name="chevron-right" class="row-chevron" />
         </a>

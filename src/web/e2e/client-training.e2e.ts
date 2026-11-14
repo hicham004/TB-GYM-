@@ -2748,3 +2748,111 @@ test('the owner on Lea’s client is told why Training is closed, and nothing of
   ]);
   await axe(page);
 });
+
+/**
+ * A trainee of TB Gym's own space (notes plan N9c5a): the house's Free covers their own workouts, never a
+ * program, so a program goes under Max, the house's coaching, booked from their ask.
+ */
+test.describe('a trainee of the house', () => {
+  const FREE = {
+    ...commercial().enrollments[0],
+    id: 'e-free',
+    productId: 'p-free',
+    offerId: 'o-free',
+    productName: 'Free',
+    offerLabel: 'Free',
+    priceAmount: 0,
+    paidAmount: 0,
+    startDate: '2026-07-01',
+    endDateExclusive: '2027-07-01',
+    lastActiveDate: '2027-06-30',
+    features: ['Training'],
+    houseTier: 'Free',
+  };
+  const MAX = {
+    ...commercial().enrollments[0],
+    id: 'e-max',
+    productId: 'p-max',
+    offerId: 'o-max',
+    productName: 'Max coaching',
+    houseTier: 'Max',
+  };
+  const holding = (...enrollments: Record<string, unknown>[]): Handlers => ({
+    [`GET /api/commercial/clients/${ID}`]: (route) =>
+      json(route, 200, { ...commercial(), enrollments }),
+  });
+  const FREE_ALONE =
+    'Maya is on Free alone, which covers their own workouts and no program. Assign one once a plan with training is booked on Service & access.';
+
+  for (const [width, height] of [
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    test(`Assign program for a Max trainee at ${width}px goes under Max, never Free`, async ({
+      page,
+    }) => {
+      const requests: { method: string; path: string; body: unknown }[] = [];
+      await openTraining(page, width, height, {
+        path: `/clients/${ID}/training?action=assign`,
+        opensSheet: true,
+        requests,
+        programs: [coachProgram([]), coachProgram([runningBlock()])],
+        extra: {
+          ...holding(FREE, MAX),
+          [`POST /api/training/clients/${ID}/mesocycles`]: (route) =>
+            json(route, 200, {
+              id: BLOCK,
+              name: 'Lean & Strong · Phase 3',
+              startDate: '2026-10-01',
+            }),
+        },
+      });
+
+      const sheet = page.getByRole('dialog', { name: 'Assign program' });
+      // One plan to choose, told rather than asked: Max, which is chosen.
+      await expect(sheet.locator('.plan-line')).toContainText(
+        'Max coaching · 12 weeks · 21 Jul – 13 Dec 2026',
+      );
+      await expect(sheet.getByLabel('Plan', { exact: true })).toHaveCount(0);
+      await expect(sheet).not.toContainText('Free alone');
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+
+      await chooseOption(sheet, 'Program', 'Lean & Strong · Phase 3 · 6 weeks');
+      await sheet.getByRole('button', { name: 'Assign program' }).click();
+      await expect(sheet).toHaveCount(0);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({
+        method: 'POST',
+        path: `/api/training/clients/${ID}/mesocycles`,
+        body: { enrollmentId: 'e-max' },
+      });
+    });
+
+    test(`a trainee on Free alone at ${width}px is told why nothing can be assigned`, async ({
+      page,
+    }) => {
+      await openTraining(page, width, height, {
+        path: `/clients/${ID}/training?action=assign`,
+        programs: [coachProgram([])],
+        extra: holding(FREE),
+      });
+
+      const empty = page.locator('app-empty-state');
+      await expect(empty.getByRole('heading', { level: 2 })).toHaveText('No program yet');
+      await expect(empty).toContainText(FREE_ALONE);
+      await expect(empty.getByRole('link', { name: 'Open Service & access' })).toHaveAttribute(
+        'href',
+        `/clients/${ID}/service`,
+      );
+      // Nothing to assign: no button here, and the address opened no sheet.
+      await expect(
+        page.locator('main').getByRole('button', { name: 'Assign program' }),
+      ).toHaveCount(0);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page).toHaveURL(`/clients/${ID}/training`);
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+    });
+  }
+});

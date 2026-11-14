@@ -25,10 +25,12 @@ import {
   coverageText,
   defaultStartDate,
   exercisesNeedingMax,
+  freeAloneLine,
   hasProgressionProblems,
   lastDayOf,
   maxRow,
   nextBlockFormula,
+  onFreeAlone,
   planChoices,
   planPaid,
   previewWeeks,
@@ -106,6 +108,36 @@ describe('choosing a plan', () => {
     );
 
     expect(choices.map((choice) => choice.id)).toEqual(['ok', 'next']);
+  });
+
+  it('leaves out the house’s Free, which covers a trainee’s own workouts, never a program (N9c5a)', () => {
+    const free = enrollment({ id: 'free', houseTier: 'Free', startDate: '2026-09-14' });
+    const max = enrollment({ id: 'max', houseTier: 'Max', startDate: '2026-10-01' });
+    const pro = enrollment({ id: 'pro', houseTier: 'ProPlus', startDate: '2026-10-05' });
+
+    expect(planChoices([free, max, pro], 'en-US').map((choice) => choice.id)).toEqual([
+      'max',
+      'pro',
+    ]);
+    expect(planChoices([free], 'en-US')).toEqual([]);
+    expect([onFreeAlone([free]), onFreeAlone([free, max]), onFreeAlone([])]).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    // A plan without training, or one over, leaves Free alone with training.
+    expect(
+      onFreeAlone([
+        free,
+        enrollment({ id: 'chat', features: ['Messaging'] }),
+        enrollment({ id: 'ended', houseTier: 'Max', effectiveStatus: 'Expired' }),
+      ]),
+    ).toBe(true);
+    // A coach's client holds no Free: nothing to assign is said as ever.
+    expect(onFreeAlone([enrollment({ features: ['Messaging'] })])).toBe(false);
+    expect(freeAloneLine('Maya')).toBe(
+      'Maya is on Free alone, which covers their own workouts and no program. Assign one once a plan with training is booked on Service & access.',
+    );
   });
 
   it('starts on today, or on the day a plan that has not begun starts', () => {

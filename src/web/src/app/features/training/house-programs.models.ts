@@ -363,6 +363,15 @@ export function runningStranded(read: HousePrograms): boolean {
   );
 }
 
+/**
+ * Whether the pass card speaks of Max (notes plan N9c5b): TB Gym coaches the trainee, so their coach
+ * picks their program, and with no Pro+ pass there is nothing for the page to offer. A running Pro+ pass
+ * keeps its own card, since the trainee may still start under it; a profile not read (null) keeps Free's.
+ */
+export function coachedOnMax(read: HousePrograms, coachedByTheHouse: boolean | null): boolean {
+  return read.pass === null && coachedByTheHouse === true;
+}
+
 /** What the Start confirmation says: the program's length from the house's day, and one at a time. */
 export function startQuestion(
   program: HouseProgram,

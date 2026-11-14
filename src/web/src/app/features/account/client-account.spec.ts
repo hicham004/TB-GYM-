@@ -54,7 +54,7 @@ async function render(
      * The client's own profile: a coach's client unless a test says otherwise, or the answer a test
      * sends itself (notes plan N9a2).
      */
-    self?: 'trainee' | 'unreadable' | Subject<ClientSelfProfile>;
+    self?: 'trainee' | 'max' | 'unreadable' | Subject<ClientSelfProfile> | ClientSelfProfile;
     /** 'waiting': no coach for now (N9d1b), the server's 404; 'forbidden' its 403. */
     coach?: 'Lea Haddad' | 'unreadable' | 'waiting' | 'forbidden';
     /** The server's word on the coach's Founding coach badge (notes plan N3b); left out when undefined. */
@@ -86,9 +86,19 @@ async function render(
     // Read before the coach's, which a trainee never asks for.
     getSelfProfile: vi.fn((): Observable<ClientSelfProfile> => {
       if (options.self instanceof Subject) return options.self;
+      if (typeof options.self === 'object') return of(options.self);
+      if (options.self === 'max') {
+        // A trainee of the house whom Max coaches (N9c5a): still the house's, coached as a coach's client.
+        return of(finishedProfile({ selfDirected: true, coachedByTheHouse: true }));
+      }
       return options.self === 'unreadable'
         ? throwError(() => new Error('offline'))
-        : of(finishedProfile({ selfDirected: options.self === 'trainee' }));
+        : of(
+            finishedProfile({
+              selfDirected: options.self === 'trainee',
+              healthStepOpen: options.self !== 'trainee',
+            }),
+          );
     }),
     getOwnCoach: vi.fn(() =>
       options.coach === 'unreadable'
@@ -704,6 +714,116 @@ describe('ClientAccount', () => {
       expect(host.querySelector('a.coach')).toBeNull();
       expect(textOf(host.querySelector('[data-self-directed] strong'))).toBe(HOUSE_NAME);
       expect(host.textContent).not.toContain('Lea Haddad');
+    });
+  });
+
+  describe('a trainee of the house whom Max coaches (notes plan N9c5b)', () => {
+    const textOf = (element: Element | null | undefined) =>
+      (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const onMax = { self: 'max' as const, memberships: [HOUSE], selected: HOUSE.tenantId };
+    const profileHint = (host: HTMLElement) =>
+      textOf(host.querySelector('a[href="/profile"] small'));
+
+    it('reads their coach as a coach’s client does: the coach’s read, and Message', async () => {
+      const { host, api } = await render(onMax);
+
+      expect(api.getSelfProfile.mock.invocationCallOrder[0]).toBeLessThan(
+        api.getOwnCoach.mock.invocationCallOrder[0],
+      );
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+      const coach = host.querySelector('a.coach')!;
+      expect(coach.getAttribute('href')).toBe('/messages');
+      expect(textOf(coach.querySelector('.coach-label'))).toBe('Your coach');
+      expect(textOf(coach.querySelector('.coach-text strong'))).toBe('Lea Haddad');
+      expect(textOf(coach.querySelector('.coach-action'))).toBe('Message');
+      expect(host.textContent).not.toContain('Self-directed');
+    });
+
+    it('shows the coach as plain text when messaging is not open to them', async () => {
+      const { host } = await render({ ...onMax, messaging: 'NoEntitlement' });
+
+      expect(host.querySelector('a.coach')).toBeNull();
+      expect(textOf(host.querySelector('.coach .coach-text strong'))).toBe('Lea Haddad');
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+    });
+
+    it('waits for a new coach in N9d2’s words when the coach’s read answers 404', async () => {
+      const { host } = await render({ ...onMax, coach: 'waiting' });
+
+      const card = host.querySelector('[data-waiting-coach]')!;
+      expect(textOf(card)).toBe(
+        'Your coach, Waiting for a new coach. Your coaching space will tell you when you have one.',
+      );
+      expect(host.querySelector('a.coach, [data-self-directed]')).toBeNull();
+    });
+
+    it('keeps a Free trainee’s card: the space, never a coach, and no coach read', async () => {
+      const { host, api } = await render({
+        self: finishedProfile({ selfDirected: true, coachedByTheHouse: false }),
+        memberships: [HOUSE],
+        selected: HOUSE.tenantId,
+      });
+
+      expect(textOf(host.querySelector('[data-self-directed] .coach-text'))).toBe(
+        `Self-directed · ${HOUSE_NAME}`,
+      );
+      expect(api.getOwnCoach).not.toHaveBeenCalled();
+    });
+
+    it('names no health details on My profile’s row while the Health step is closed', async () => {
+      const free = await render({
+        self: 'trainee',
+        memberships: [HOUSE],
+        selected: HOUSE.tenantId,
+      });
+      expect(profileHint(free.host)).toBe('Your goals and contact info');
+      TestBed.resetTestingModule();
+
+      const max = await render({
+        self: finishedProfile({
+          selfDirected: true,
+          coachedByTheHouse: true,
+          healthStepOpen: true,
+        }),
+        memberships: [HOUSE],
+        selected: HOUSE.tenantId,
+      });
+      expect(profileHint(max.host)).toBe('Your goals, health details and contact info');
+      TestBed.resetTestingModule();
+
+      const client = await render();
+      expect(profileHint(client.host)).toBe('Your goals, health details and contact info');
+    });
+
+    it('names health details while the profile is read, or when it cannot be', async () => {
+      const self = new Subject<ClientSelfProfile>();
+      const reading = await render({ self, memberships: [HOUSE], selected: HOUSE.tenantId });
+      expect(profileHint(reading.host)).toBe('Your goals, health details and contact info');
+
+      self.next(finishedProfile({ selfDirected: true, healthStepOpen: false }));
+      self.complete();
+      await settle(reading.fixture);
+      expect(profileHint(reading.host)).toBe('Your goals and contact info');
+      TestBed.resetTestingModule();
+
+      const unreadable = await render({ self: 'unreadable' });
+      expect(profileHint(unreadable.host)).toBe('Your goals, health details and contact info');
+    });
+
+    it('names health details again in another space, once the house’s closed step is left', async () => {
+      const { fixture, host, api, selectedTenantId } = await render({
+        self: 'trainee',
+        memberships: [ATLAS, HOUSE],
+        selected: HOUSE.tenantId,
+      });
+      expect(profileHint(host)).toBe('Your goals and contact info');
+
+      api.getSelfProfile.mockReturnValue(of(finishedProfile()));
+      selectedTenantId.set(ATLAS.tenantId);
+      fixture.detectChanges();
+      expect(profileHint(host)).toBe('Your goals, health details and contact info');
+      await settle(fixture);
+      expect(profileHint(host)).toBe('Your goals, health details and contact info');
     });
   });
 });

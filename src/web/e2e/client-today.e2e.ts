@@ -638,12 +638,22 @@ interface TraineeToday {
   readonly closed?: boolean;
   /** The training card's heading once it is drawn; the offer to start a workout by default. */
   readonly heading?: string;
+  /**
+   * Max coaches them (notes plan N9c5b): Training, Nutrition, Check-ins and Messaging are in their plan,
+   * their profile says Max coaches them, and their coach's read names the house's Coach, or answers 404
+   * while they wait for one.
+   */
+  readonly max?: 'coached' | 'waiting';
   readonly extra?: Record<string, (route: Route) => Promise<void> | void>;
 }
 
+/** What a month of Max holds: the four features (N9c5a). */
+const MAX_FEATURES = ['Training', 'Nutrition', 'CheckIns', 'Messaging'];
+
 /**
  * Today for a trainee of the house: Training alone, nothing in it yet, and their own profile says they
- * coach themselves. Returns the reads of the coach's name, which must never be asked for (CLI-026).
+ * coach themselves. Returns the reads of the coach's name, which must never be asked for (CLI-026),
+ * unless Max coaches them (N9c5b).
  */
 async function openTraineeToday(
   page: Page,
@@ -668,17 +678,38 @@ async function openTraineeToday(
         json(
           route,
           200,
-          FEATURES.map((feature) => ({
-            feature,
-            isAllowed: feature === 'Training' && !options.closed,
-            reason: feature === 'Training' ? training : 'NoEntitlement',
-          })),
+          FEATURES.map((feature) =>
+            options.max
+              ? {
+                  feature,
+                  isAllowed: MAX_FEATURES.includes(feature),
+                  reason: MAX_FEATURES.includes(feature) ? 'Granted' : 'NoEntitlement',
+                }
+              : {
+                  feature,
+                  isAllowed: feature === 'Training' && !options.closed,
+                  reason: feature === 'Training' ? training : 'NoEntitlement',
+                },
+          ),
         ),
       'GET /api/client-profile/me': (route: Route) =>
-        json(route, 200, finishedProfile({ selfDirected: true })),
+        json(
+          route,
+          200,
+          finishedProfile({
+            selfDirected: true,
+            ...(options.max ? { coachedByTheHouse: true } : {}),
+          }),
+        ),
       // Answered as for anyone, so only the count can tell it was asked.
       'GET /api/client-profile/me/coach': (route: Route) =>
-        json(route, 200, { name: 'Lea Haddad' }),
+        options.max === 'waiting'
+          ? json(route, 404, { title: 'Not Found' })
+          : json(route, 200, { name: options.max ? 'Nadim Khoury' : 'Lea Haddad' }),
+      // Max's other features: no meal plan today and no check-in due.
+      'GET /api/nutrition/me/day': (route: Route) => json(route, 200, null),
+      'GET /api/checkins/me/assignments': (route: Route) =>
+        json(route, 200, { clientProfileId: 'maya', total: 0, items: [] }),
       'GET /api/training/me/today': (route: Route) =>
         json(
           route,
@@ -1138,6 +1169,128 @@ test('a trainee whose Training is closed is offered no Browse exercises either',
 
   await expect(page.locator('p[data-self-directed]')).toHaveText('Your workouts will start here.');
   await expect(page.locator('[data-browse-pool]')).toHaveCount(0);
+});
+
+// Notes plan N9c5b: Max coaches a trainee of the house. Their coach is read and named as a coach's
+// client's is, with Message your coach, while Start a workout, the pool and their own week stay theirs.
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width}px a trainee Max coaches names their coach, keeps Start a workout and offers Message your coach`, async ({
+    page,
+  }) => {
+    const coachReads = await openTraineeToday(page, width, height, { max: 'coached' });
+
+    await expect(page.locator('.today-coach[data-self-directed]')).toHaveCount(0);
+    const chip = page.locator('.today-coach');
+    await expect(chip).toHaveCount(1);
+    await expect(chip.locator('.tb-visually-hidden')).toHaveText('Coached by');
+    await expect(chip.locator('app-avatar')).toHaveText('NK');
+    // On a phone the chip is the mark alone, as a coach's client's is; wider, the name shows too.
+    const name = chip.locator(':scope > span[dir="auto"]');
+    await expect(name).toHaveText('Nadim Khoury');
+    if (width === 390) await expect(name).toBeHidden();
+    else await expect(name).toBeVisible();
+    await expect(page.getByText('Self-directed')).toHaveCount(0);
+
+    const card = page.locator('section.today-card');
+    await expect(card).toHaveClass(/today-card--hero/);
+    await expect(card.locator('p[data-self-directed]')).toHaveText(
+      'Pick exercises from TB Gym’s pool and log each set as you go.',
+    );
+    await expect(card.getByRole('button', { name: 'Start a workout' })).toBeVisible();
+    await expect(card.getByRole('link', { name: 'Browse exercises' })).toHaveAttribute(
+      'href',
+      '/training/pool',
+    );
+    await expect(card.locator('p.hint[data-max-coach]')).toHaveText(
+      'Your coach will put your program here.',
+    );
+    await expect(card.getByRole('link', { name: 'Message your coach' })).toHaveAttribute(
+      'href',
+      '/messages',
+    );
+    // One link to write to the coach on the page, beside the Messages tab Max opens.
+    await expect(page.getByRole('link', { name: 'Message your coach' })).toHaveCount(1);
+    await expect(page.locator('app-client-tabs a[href="/messages"]')).toHaveCount(1);
+    await expect(card.locator('.today-action')).toHaveCount(1);
+    // Nothing scheduled and nothing done: their week still speaks of their own workouts.
+    await expect(page.locator('section.today-week [data-own-week]')).toHaveText('No workouts yet');
+    expect(coachReads).toHaveLength(1);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath(`n9c5b-today-max-${width}.png`),
+      fullPage: true,
+    });
+  });
+}
+
+test('at 390px a trainee Max coaches reads their coach’s line in dark mode and at 200% text', async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openTraineeToday(page, 390, 844, { max: 'coached' });
+
+  const card = page.locator('section.today-card');
+  await expect(card.locator('[data-max-coach]')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await page.screenshot({
+    path: test.info().outputPath('n9c5b-today-max-390-dark.png'),
+    fullPage: true,
+  });
+
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expect(card.getByRole('link', { name: 'Message your coach' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  // Every line stays inside the card, which hides what spills over.
+  const box = await card.boundingBox();
+  for (const part of [
+    card.locator('[data-max-coach]'),
+    card.getByRole('link', { name: 'Message your coach' }),
+    card.getByRole('button', { name: 'Start a workout' }),
+  ]) {
+    const inner = await part.boundingBox();
+    expect(inner!.x + inner!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
+  }
+  await page.screenshot({
+    path: test.info().outputPath('n9c5b-today-max-390-dark-200.png'),
+    fullPage: true,
+  });
+});
+
+test.describe('a trainee Max coaches, waiting for a coach', () => {
+  test.use({
+    allowedConsoleErrors: {
+      patterns: [/status of 404 .*\/api\/client-profile\/me\/coach/],
+    },
+  });
+
+  test('Today says they wait for a coach, keeps Start a workout and offers no chat', async ({
+    page,
+  }) => {
+    const coachReads = await openTraineeToday(page, 390, 844, { max: 'waiting' });
+
+    const chip = page.locator('.today-coach[data-waiting-coach]');
+    await expect(chip).toHaveText('Waiting for a coach');
+    await expect(page.locator('.today-coach')).toHaveCount(1);
+    const card = page.locator('section.today-card');
+    await expect(card.getByRole('button', { name: 'Start a workout' })).toBeVisible();
+    await expect(card.locator('p.hint[data-max-coach]')).toHaveText(
+      'Your coaching space will give you a new coach, who will put your program here.',
+    );
+    await expect(page.getByText('Your coach will put your program here.')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Message your coach' })).toHaveCount(0);
+    expect(coachReads).toHaveLength(1);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c5b-today-max-waiting-390.png'),
+      fullPage: true,
+    });
+  });
 });
 
 test.describe('a start the server refuses', () => {

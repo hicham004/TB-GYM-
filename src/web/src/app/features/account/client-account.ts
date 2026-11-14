@@ -85,9 +85,15 @@ export class ClientAccount {
   protected readonly coachName = signal<string | null>(null);
   /**
    * A trainee of TB Gym's own space, who coaches themselves (CLI-026): the card names the space, never
-   * a member of its staff, and offers no Message (notes plan N9a2).
+   * a member of its staff, and offers no Message (notes plan N9a2). A trainee Max coaches (N9c5a) is
+   * not: their card reads their coach as a coach's client's does.
    */
   protected readonly selfDirected = signal(false);
+  /**
+   * Whether the intake's Health step is open to them (N9c5a): closed for a trainee of the house who is not
+   * on Max, so My profile's row names no health details. Open until the profile says otherwise.
+   */
+  protected readonly healthStepOpen = signal(true);
   /** The space's name as the person's own membership carries it. */
   protected readonly spaceName = computed(
     () =>
@@ -153,6 +159,7 @@ export class ClientAccount {
       this.loadedTenantId = null;
       this.coachName.set(null);
       this.selfDirected.set(false);
+      this.healthStepOpen.set(true);
       this.coachFounding.set(false);
       this.coachLines.set([]);
       this.coachLoading.set(false);
@@ -166,6 +173,7 @@ export class ClientAccount {
       untracked(() => {
         this.coachName.set(null);
         this.selfDirected.set(false);
+        this.healthStepOpen.set(true);
         this.coachFounding.set(false);
         this.coachLines.set([]);
         this.waitingForCoach.set(false);
@@ -224,13 +232,15 @@ export class ClientAccount {
   /**
    * A coach who cannot be read (a 403, a failure) leaves the coach line out, never an error; a 404 after
    * the profile read means the client waits for a coach (N9d1b), and the card says so. The client's own
-   * profile is read first, so a self-directed trainee's never asks for the coach.
+   * profile is read first, so a self-directed trainee's never asks for the coach; a trainee Max coaches
+   * (N9c5a) does, as a coach's client, and waits for a new coach on a 404 in the same words.
    */
   private async loadCoach(): Promise<void> {
     return this.scope.run('coach', async (owner) => {
       try {
         const self = await owner.wait(firstValueFrom(this.api.getSelfProfile()));
-        if (self.selfDirected === true) {
+        if (owner.current) this.healthStepOpen.set(self.healthStepOpen !== false);
+        if (self.selfDirected === true && self.coachedByTheHouse !== true) {
           if (owner.current) this.selfDirected.set(true);
           return;
         }

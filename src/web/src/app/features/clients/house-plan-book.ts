@@ -28,10 +28,11 @@ import { shortDate } from './client-service.models';
 import { HousePlanAsksApi } from './house-plan-asks-api';
 import {
   amountInput,
-  askEnded,
+  asksOutOfDate,
   bookingErrors,
   bookingIntro,
   bookingLine,
+  bookingNoPlace,
   bookingRefusal,
   type HousePlanAsk,
 } from './house-plan-asks.models';
@@ -50,6 +51,9 @@ import {
     <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="plan-line" dir="auto">{{ planLine() }}</p>
       <p dir="auto">{{ intro() }}</p>
+      @if (noPlace(); as line) {
+        <p dir="auto" data-no-place>{{ line }}</p>
+      }
       @if (ask().moneySent; as sent) {
         @if (sent.whishName && sent.whishNumber) {
           <p class="sent" i18n>
@@ -210,6 +214,8 @@ export class HousePlanBook {
   protected readonly intro = computed(() =>
     bookingIntro(this.ask(), this.firstName(), this.locale),
   );
+  /** A Max ask the trainee was told not to pay yet (N9c5a). */
+  protected readonly noPlace = computed(() => bookingNoPlace(this.ask(), this.firstName()));
   protected readonly sentDay = computed(() => {
     const sent = this.ask().moneySent;
     return sent ? shortDate(sent.sentOn, this.locale) : '';
@@ -290,7 +296,8 @@ export class HousePlanBook {
         } else {
           this.error.set(refusal.message);
         }
-        if (askEnded(error)) this.stale.emit();
+        // Ended meanwhile, or Max full or closed: the asks' places and turns are out of date too (N9c5a).
+        if (asksOutOfDate(error)) this.stale.emit();
         this.summary().focus();
       } finally {
         if (owner.current) this.setBusy(false);

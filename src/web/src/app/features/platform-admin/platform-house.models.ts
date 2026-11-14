@@ -178,6 +178,17 @@ export function houseSettingWords(): Record<HouseSetting, HouseSettingWords> {
       reason: $localize`Enter 6 to 20 digits, with a + in front if you like and spaces between groups, or leave it empty.`,
       maxLength: WHISH_NUMBER_MAXIMUM_LENGTH,
     },
+    // Notes plan N9c5a/N9c5b: never "places" in its name, which the sign-up card uses for this week's sign-ups.
+    MaxPlaces: {
+      kind: 'number',
+      label: $localize`Trainees on Max at a time`,
+      inSentence: $localize`the number of trainees on Max at a time`,
+      help: $localize`A whole number from 0 to 1,000. Empty or 0 keeps Max closed. A booked Max plan keeps its place until it ends.`,
+      reason: $localize`Enter a whole number from 0 to 1,000, or leave it empty.`,
+      min: 0,
+      max: 1_000,
+      unit: 'count',
+    },
   };
 }
 

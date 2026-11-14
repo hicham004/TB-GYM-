@@ -51,49 +51,60 @@
                 >
               } @else if (askNews(); as news) {
                 {{ news }}
+              } @else if (ask.placeLine; as line) {
+                <!-- A Max ask with no place open (N9c5a): said here, so focus after a new read lands on it. -->
+                {{ line }}
               }
             </p>
             @if (ask.state === 'Asked') {
-              @if (house()?.whishNumber; as whish) {
-                <div class="whish">
-                  <p class="plan-note">
-                    <ng-container i18n
-                      >Send <span class="plan-dates">{{ ask.price }}</span> by Whish to
-                      <strong class="whish-number" dir="ltr" translate="no">{{ whish }}</strong
-                      >, then tell TB Gym you sent it.</ng-container
+              @if (ask.placeOpenLine; as line) {
+                <p class="plan-note" data-place-open>{{ line }}</p>
+              }
+              <!-- While its place on Max is not open, nothing here says to send money: no Whish, no I've paid. -->
+              @if (!ask.waitingForPlace) {
+                @if (house()?.whishNumber; as whish) {
+                  <div class="whish">
+                    <p class="plan-note">
+                      <ng-container i18n
+                        >Send <span class="plan-dates">{{ ask.price }}</span> by Whish to
+                        <strong class="whish-number" dir="ltr" translate="no">{{ whish }}</strong
+                        >, then tell TB Gym you sent it.</ng-container
+                      >
+                    </p>
+                    <button
+                      appButton
+                      type="button"
+                      variant="outlined"
+                      class="copy"
+                      (click)="copy(whish)"
+                      data-copy-whish
                     >
-                  </p>
-                  <button
-                    appButton
-                    type="button"
-                    variant="outlined"
-                    class="copy"
-                    (click)="copy(whish)"
-                    data-copy-whish
-                  >
-                    <ng-container i18n
-                      >Copy<span class="tb-visually-hidden"> the Whish number</span></ng-container
-                    >
-                  </button>
-                </div>
-              } @else {
-                <p class="plan-note" i18n>If you already sent the money, tell TB Gym here.</p>
+                      <ng-container i18n
+                        >Copy<span class="tb-visually-hidden"> the Whish number</span></ng-container
+                      >
+                    </button>
+                  </div>
+                } @else {
+                  <p class="plan-note" i18n>If you already sent the money, tell TB Gym here.</p>
+                }
               }
               <p class="plan-note" i18n>
                 Nothing changes until TB Gym books it. Free keeps running.
               </p>
-              <button
-                appButton
-                type="button"
-                variant="accent"
-                size="touch"
-                class="plan-action"
-                (click)="openPaidSheet(ask)"
-                data-paid
-                i18n
-              >
-                I’ve paid
-              </button>
+              @if (!ask.waitingForPlace) {
+                <button
+                  appButton
+                  type="button"
+                  variant="accent"
+                  size="touch"
+                  class="plan-action"
+                  (click)="openPaidSheet(ask)"
+                  data-paid
+                  i18n
+                >
+                  I’ve paid
+                </button>
+              }
             } @else {
               <p class="plan-note" i18n>
                 TB Gym books your plan once the money is there. Free keeps running underneath.
@@ -288,6 +299,10 @@
                     }
                   </ul>
                 }
+                @if (group.placeLine; as line) {
+                  <!-- Every place on Max is taken (N9c5a): each Ask for is described by this line. -->
+                  <p class="quiet" [id]="'place-' + group.productId" data-place-line>{{ line }}</p>
+                }
                 <ul class="options" role="list">
                   @for (option of group.options; track option.offerId) {
                     <li class="option" [attr.data-offer]="option.offerId">
@@ -322,6 +337,9 @@
                         variant="outlined"
                         class="option-ask"
                         [attr.aria-label]="option.askName"
+                        [attr.aria-describedby]="
+                          group.placeLine ? 'place-' + group.productId : null
+                        "
                         (click)="openAskSheet(group, option)"
                       >
                         <!-- One flex item, so the button's gap never opens between the words. -->

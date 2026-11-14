@@ -43,6 +43,11 @@ export interface HouseOffer {
   readonly durationCount: number;
   readonly durationUnit: OfferDurationUnit;
   readonly features: readonly CoachingFeature[];
+  /**
+   * A Max option alone (N9c5a): whether an ask from this trainee would have a place now, the same on every
+   * Max option; null for Pro+, and for an older answer that does not say.
+   */
+  readonly placeOpen: boolean | null;
 }
 
 /** The trainee's word that the money was sent, with the Whish details they gave. */
@@ -63,6 +68,7 @@ export interface HouseAskOutcome {
 export interface HouseAsk {
   readonly id: string;
   readonly offerId: string;
+  readonly tier: HouseTier;
   readonly planName: string;
   readonly optionLabel: string;
   readonly priceAmount: number;
@@ -73,6 +79,11 @@ export interface HouseAsk {
   readonly state: HouseAskState;
   readonly moneySent: HouseAskTransfer | null;
   readonly outcome: HouseAskOutcome | null;
+  /**
+   * An open Max ask alone (N9c5a): whether it has a place now, so the money may be sent; null for Pro+, for
+   * a booked or closed ask, and for an older answer. The trainee never reads their turn in line.
+   */
+  readonly placeOpen: boolean | null;
 }
 
 /** What `GET /api/house-plans/me` says: whether asks are open, where to send the money, the plans, the asks. */
@@ -98,6 +109,7 @@ export function toHouseOffer(view: HousePlanOfferView): HouseOffer {
     durationCount: Number(view.durationCount),
     durationUnit: view.durationUnit,
     features: view.features,
+    placeOpen: view.placeOpen ?? null,
   };
 }
 
@@ -105,6 +117,7 @@ export function toHouseAsk(view: HousePlanAskView): HouseAsk {
   return {
     id: view.id,
     offerId: view.offerId,
+    tier: view.tier,
     planName: view.planName,
     optionLabel: view.optionLabel,
     priceAmount: Number(view.priceAmount),
@@ -129,6 +142,7 @@ export function toHouseAsk(view: HousePlanAskView): HouseAsk {
           planLastDay: view.outcome.planLastDay,
         }
       : null,
+    placeOpen: view.placeOpen ?? null,
   };
 }
 
@@ -182,13 +196,29 @@ export interface HousePlanGroup {
   /** What every option includes, said once; null when the options differ. */
   readonly includes: readonly FeatureChip[] | null;
   readonly options: readonly HouseOption[];
+  /**
+   * Said under what the plan includes while every place on Max is taken (N9c5a): an ask still waits in line,
+   * and no money is sent before a place opens. Null for any other plan, and for Max with a place open.
+   */
+  readonly placeLine: string | null;
 }
 
 /** What the trainee chose to ask for, which the confirmation repeats. */
 export interface HouseAskChoice {
   readonly planName: string;
   readonly option: HouseOption;
+  /** Every place on Max is taken: the ask will wait in line, so the sheet says not to send money yet. */
+  readonly waitingForPlace: boolean;
 }
+
+/** Under a Max plan whose places are all taken, tied to its Ask for buttons (N9c5a). */
+export const MAX_FULL_LINE = $localize`Every place on Max is taken right now. You can still ask: your ask waits in line, and you send money only once a place opens for you.`;
+
+/** On the open ask's card while its Max place is not open: the server's own sentence when "I've paid" is refused. */
+export const MAX_PLACE_NOT_OPEN = $localize`A Max place isn’t open for you yet. Your ask is kept in line; don’t send money until a place opens.`;
+
+/** Before where to send the money, once a place on Max is open for the ask. */
+export const MAX_PLACE_OPEN = $localize`A place on Max is open for you now.`;
 
 function chips(features: readonly CoachingFeature[]): FeatureChip[] {
   return LISTED_FEATURES.filter((feature) => features.includes(feature)).map(featureChip);
@@ -225,6 +255,8 @@ export function planGroups(plans: readonly HouseOffer[], locale: string): HouseP
       name: first.name,
       description: first.description,
       includes: shared ? chips(first.features) : null,
+      // The same on every Max option: it is this trainee's chance of a place, not the option's.
+      placeLine: offers.some((offer) => offer.placeOpen === false) ? MAX_FULL_LINE : null,
       options: offers.map((offer) => {
         const length = duration(offer);
         return {
@@ -240,11 +272,16 @@ export function planGroups(plans: readonly HouseOffer[], locale: string): HouseP
   });
 }
 
-/** Where an ask stands, in the pill on it. */
-export function askPill(state: HouseAskState): Pill {
+/**
+ * Where an ask stands, in the pill on it. An asked Max ask with no place open waits for a place, never for
+ * the trainee's payment (N9c5a): nothing is theirs to do yet.
+ */
+export function askPill(state: HouseAskState, placeOpen: boolean | null = null): Pill {
   switch (state) {
     case 'Asked':
-      return { label: $localize`Waiting for your payment`, tone: 'warm' };
+      return placeOpen === false
+        ? { label: $localize`Waiting for a place`, tone: 'info' }
+        : { label: $localize`Waiting for your payment`, tone: 'warm' };
     case 'MoneySent':
       return { label: $localize`Money sent`, tone: 'info' };
     case 'Booked':
@@ -281,12 +318,24 @@ export interface OpenAskCard {
     readonly name: string;
     readonly number: string;
   } | null;
+  /**
+   * An asked Max ask with no place open (N9c5a): the card shows neither where to send the money nor "I've
+   * paid", which the server would refuse.
+   */
+  readonly waitingForPlace: boolean;
+  /** Said in the card's status line while it waits for a place; null otherwise. */
+  readonly placeLine: string | null;
+  /** Said before where to send the money once an asked Max ask has its place; null otherwise. */
+  readonly placeOpenLine: string | null;
 }
 
 export function openAskCard(ask: HouseAsk, today: string, locale: string): OpenAskCard {
   const cost = price(ask.priceAmount, ask.priceCurrency, locale);
   const length = duration(ask);
   const sent = ask.state === 'MoneySent' ? ask.moneySent : null;
+  // Money said sent reads as it always has: its place is held, and the staff book it.
+  const asked = ask.state !== 'MoneySent';
+  const waitingForPlace = asked && ask.placeOpen === false;
   return {
     id: ask.id,
     state: ask.state === 'MoneySent' ? 'MoneySent' : 'Asked',
@@ -297,7 +346,7 @@ export function openAskCard(ask: HouseAsk, today: string, locale: string): OpenA
     cost: sameLength(ask.optionLabel, length, locale)
       ? cost
       : $localize`${cost}:price: for ${length}:length:`,
-    pill: askPill(ask.state),
+    pill: askPill(ask.state, asked ? ask.placeOpen : null),
     sent: sent
       ? {
           on: houseDay(sent.sentOn, today, locale),
@@ -305,6 +354,9 @@ export function openAskCard(ask: HouseAsk, today: string, locale: string): OpenA
           number: sent.whishNumber ?? '',
         }
       : null,
+    waitingForPlace,
+    placeLine: waitingForPlace ? MAX_PLACE_NOT_OPEN : null,
+    placeOpenLine: asked && ask.placeOpen === true ? MAX_PLACE_OPEN : null,
   };
 }
 
@@ -399,7 +451,10 @@ export interface HouseRefusal {
   readonly stale: boolean;
 }
 
-/** The refusals after which the page's plans and asks are out of date. */
+/**
+ * The refusals after which the page's plans and asks are out of date. Every refusal about Max's places
+ * (`house_max_…`, N9c5a: no place open yet, Max closed) is one too: a place opens or closes without the page.
+ */
 const STALE_CODES: ReadonlySet<string> = new Set([
   'house_plan_asks_closed',
   'house_plan_not_on_sale',
@@ -407,7 +462,13 @@ const STALE_CODES: ReadonlySet<string> = new Set([
   'client_blocked',
   'house_plan_money_already_sent',
   'house_plan_ask_ended',
+  'house_max_place_not_open',
+  'house_max_closed',
 ]);
+
+function isStale(code: string): boolean {
+  return STALE_CODES.has(code) || code.startsWith('house_max_');
+}
 
 function firstMessage(value: unknown): string | null {
   const first = Array.isArray(value) ? (value as unknown[])[0] : null;
@@ -432,7 +493,7 @@ export function houseRefusal(error: unknown, fallback: string): HouseRefusal {
     if (error.status === 404) {
       return { message: fallback, whishName: null, whishNumber: null, stale: true };
     }
-    if (code !== null && STALE_CODES.has(code)) {
+    if (code !== null && isStale(code)) {
       return {
         message: apiErrorMessage(error, fallback),
         whishName: null,

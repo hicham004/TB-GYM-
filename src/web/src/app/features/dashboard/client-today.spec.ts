@@ -162,6 +162,21 @@ const trainee = (api: Record<string, unknown> = {}) => ({
   spaceName: HOUSE_NAME,
   api: { getSelfProfile: vi.fn(() => of(finishedProfile({ selfDirected: true }))), ...api },
 });
+/**
+ * A trainee of the house whom Max coaches (notes plan N9c5b): still the house's, coached by its Coach,
+ * with Max's four features and no resources.
+ */
+const maxTrainee = (api: Record<string, unknown> = {}) => ({
+  spaceName: HOUSE_NAME,
+  access: fakeClientAccess({ ResourceLibrary: 'NoEntitlement' }),
+  api: {
+    getSelfProfile: vi.fn(() =>
+      of(finishedProfile({ selfDirected: true, coachedByTheHouse: true })),
+    ),
+    getOwnCoach: vi.fn(() => of({ name: 'Nadim Khoury' })),
+    ...api,
+  },
+});
 const textOf = (element: Element | null | undefined) =>
   (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
@@ -1119,6 +1134,249 @@ describe('ClientToday', () => {
         HOUSE_NAME,
       );
       expect(host.querySelector('.today-coach')?.textContent).not.toContain('Hicham Haddad');
+    });
+  });
+
+  describe('a trainee Max coaches (notes plan N9c5b)', () => {
+    const startCard = (host: HTMLElement) => host.querySelector<HTMLElement>('section.today-card')!;
+
+    it('names their coach where a coach’s client’s goes, read after their profile, never as Self-directed', async () => {
+      const { host, api, read } = await render(maxTrainee());
+
+      expect(api.getSelfProfile).toHaveBeenCalledTimes(1);
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(1);
+      expect(api.getSelfProfile.mock.invocationCallOrder[0]).toBeLessThan(
+        api.getOwnCoach.mock.invocationCallOrder[0],
+      );
+      const chip = host.querySelector('.today-coach')!;
+      expect(host.querySelectorAll('.today-coach')).toHaveLength(1);
+      expect(
+        chip.matches('div.today-coach:not(.today-coach--self):not([data-self-directed])'),
+      ).toBe(true);
+      expect(textOf(chip.querySelector('.tb-visually-hidden'))).toBe('Coached by');
+      expect(chip.textContent).toContain('Nadim Khoury');
+      expect(chip.querySelector('app-avatar')?.textContent?.trim()).toBe('NK');
+      expect(chip.querySelector(':scope > span[dir="auto"]')?.textContent).toBe('Nadim Khoury');
+      expect(host.querySelector('.today-self')).toBeNull();
+      expect(read()).not.toContain('Self-directed');
+    });
+
+    it('keeps Start a workout and Browse exercises, then says their coach will put their program here, with Message your coach', async () => {
+      const { host, api } = await render({
+        ...maxTrainee(),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      const section = startCard(host);
+      expect(section.classList).toContain('today-card--hero');
+      expect(textOf(section.querySelector('#today-training-heading'))).toBe('Your workout');
+      expect(textOf(section.querySelector('p[data-self-directed]'))).toBe(
+        'Pick exercises from TB Gym’s pool and log each set as you go.',
+      );
+      const start = section.querySelector('button[data-start-own]')!;
+      expect(textOf(start)).toBe('Start a workout');
+      const browse = section.querySelector('a[data-browse-pool]')!;
+      expect(browse.getAttribute('href')).toBe('/training/pool');
+      // The coach's line, in the hero's ink (a bare paragraph is grey on brand), after the pool's link.
+      const line = section.querySelector('p[data-max-coach]')!;
+      expect(textOf(line)).toBe('Your coach will put your program here.');
+      expect(line.classList).toContain('hint');
+      expect(browse.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // One link to write to the coach, after the line, and one action, which starts the workout.
+      const messages = section.querySelectorAll<HTMLAnchorElement>('a[href="/messages"]');
+      expect(messages).toHaveLength(1);
+      expect(textOf(messages[0])).toBe('Message your coach');
+      expect(messages[0].classList).toContain('text-link');
+      expect(
+        line.compareDocumentPosition(messages[0]) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(host.querySelectorAll('a[href="/messages"].text-link')).toHaveLength(1);
+      expect(section.querySelectorAll('.today-action')).toHaveLength(1);
+      expect(textOf(section)).not.toContain('Nothing assigned yet');
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(1);
+    });
+
+    it('draws Message your coach’s focus ring in the hero’s ink', async () => {
+      const { host } = await render({ ...maxTrainee(), day: day(), upcoming: nothingAssigned() });
+
+      const message = host.querySelector('a[data-max-message]')!;
+      expect(message.closest('.today-card')?.classList).toContain('today-card--hero');
+      expect(focusRings(message).at(-1)).toBe('var(--tb-on-brand)');
+    });
+
+    it('holds the start card until their coach answers, so the coach’s line never lands after it', async () => {
+      const coach = new Subject<{ name: string }>();
+      const { fixture, host } = await render({
+        ...maxTrainee({ getOwnCoach: vi.fn(() => coach) }),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      expect(host.querySelector('#today-training-heading')).toBeNull();
+      expect(host.querySelector('[data-start-own]')).toBeNull();
+      expect(host.querySelector('.today-coach--waiting')?.getAttribute('aria-hidden')).toBe('true');
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+
+      coach.next({ name: 'Nadim Khoury' });
+      coach.complete();
+      await settle(fixture);
+
+      expect(host.querySelector('button[data-start-own]')).not.toBeNull();
+      expect(textOf(host.querySelector('[data-max-coach]'))).toBe(
+        'Your coach will put your program here.',
+      );
+      expect(host.querySelector('a[data-max-message]')).not.toBeNull();
+    });
+
+    it('offers no Message your coach while messaging is out of their plan, and keeps the line', async () => {
+      const { host, read } = await render({
+        ...maxTrainee(),
+        access: fakeClientAccess({ Messaging: 'NoEntitlement', ResourceLibrary: 'NoEntitlement' }),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      expect(textOf(host.querySelector('[data-max-coach]'))).toBe(
+        'Your coach will put your program here.',
+      );
+      expect(host.querySelector('button[data-start-own]')).not.toBeNull();
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+      expect(read()).not.toContain('Message your coach');
+      expect(host.querySelector('.today-coach')?.textContent).toContain('Nadim Khoury');
+    });
+
+    it('says they wait for a coach when the coach’s read answers 404, with no chat, and keeps Start a workout', async () => {
+      const { host, read } = await render({
+        ...maxTrainee({
+          getOwnCoach: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404 }))),
+        }),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      const chip = host.querySelector('.today-coach')!;
+      expect(chip.matches('div.today-coach.today-coach--none[data-waiting-coach]')).toBe(true);
+      expect(textOf(chip)).toBe('Waiting for a coach');
+      expect(host.querySelector('button[data-start-own]')).not.toBeNull();
+      expect(textOf(host.querySelector('[data-max-coach]'))).toBe(
+        'Your coaching space will give you a new coach, who will put your program here.',
+      );
+      expect(read()).not.toContain('Your coach will put your program here.');
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+      expect(read()).not.toContain('Message your coach');
+    });
+
+    it('names nobody on a refusal or a failure of the coach’s read, and keeps the coach’s line', async () => {
+      const { host } = await render({
+        ...maxTrainee({
+          getOwnCoach: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 403 }))),
+        }),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      expect(host.querySelector('.today-coach')).toBeNull();
+      expect(host.querySelector('[data-waiting-coach]')).toBeNull();
+      expect(textOf(host.querySelector('[data-max-coach]'))).toBe(
+        'Your coach will put your program here.',
+      );
+      expect(host.querySelector('button[data-start-own]')).not.toBeNull();
+    });
+
+    it('counts their week in workouts of their own, as the house’s trainee', async () => {
+      const { host } = await render({
+        ...maxTrainee({
+          getMyTrainingWeek: vi.fn(() => of(trainingWeek([{ ownCompleted: 1 }, {}]))),
+        }),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      expect(textOf(host.querySelector('.today-week-top [data-own-week]'))).toBe('1 workout done');
+      expect(
+        [...host.querySelectorAll('.today-week-days li .tb-visually-hidden')]
+          .slice(0, 2)
+          .map(textOf),
+      ).toEqual(['1 workout done', 'No workout']);
+      expect(textOf(host.querySelector('.today-week-top'))).not.toContain('sessions done');
+    });
+
+    it('opens a scheduled session as anyone’s, with their coach named above it', async () => {
+      const { host } = await render(maxTrainee());
+
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('Upper Body — Strength B');
+      expect(host.querySelector('[data-start-own], [data-max-coach]')).toBeNull();
+      expect(host.querySelector('.today-coach')?.textContent).toContain('Nadim Khoury');
+    });
+
+    it('leaves a trainee Max does not coach as Self-directed, with no coach read and no coach’s line', async () => {
+      const { host, api, read } = await render({
+        ...trainee({
+          getSelfProfile: vi.fn(() =>
+            of(finishedProfile({ selfDirected: true, coachedByTheHouse: false })),
+          ),
+        }),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      expect(host.querySelector('.today-coach[data-self-directed]')).not.toBeNull();
+      expect(api.getOwnCoach).not.toHaveBeenCalled();
+      expect(host.querySelector('button[data-start-own]')).not.toBeNull();
+      expect(host.querySelector('[data-max-coach], [data-max-message]')).toBeNull();
+      expect(read()).not.toContain('Your coach will put your program here.');
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+    });
+
+    it('never reads Max into a coach’s client: coachedByTheHouse alone does not make a house trainee', async () => {
+      const { host, read } = await render({
+        api: {
+          getSelfProfile: vi.fn(() => of(finishedProfile({ coachedByTheHouse: true }))),
+        },
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('Nothing assigned yet');
+      expect(host.querySelector('[data-start-own], [data-max-coach]')).toBeNull();
+      expect(read()).toContain('Your coach will put your program here.');
+    });
+
+    it('reads each space again as the workspace changes: Max, a coach’s space, then the house on Free', async () => {
+      let profile = finishedProfile({ selfDirected: true, coachedByTheHouse: true });
+      const { fixture, host, api, tenant, brand } = await render({
+        ...maxTrainee({ getSelfProfile: vi.fn(() => of(profile)) }),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+      expect(host.querySelector('[data-max-coach]')).not.toBeNull();
+      expect(host.querySelector('.today-coach')?.textContent).toContain('Nadim Khoury');
+
+      // To a coach's space: the house's own screens go with it, and the coach's client's card is drawn.
+      profile = finishedProfile();
+      brand.name.set('Atlas Performance');
+      tenant.set('tenant-2');
+      fixture.detectChanges();
+      expect(host.querySelector('[data-max-coach], [data-start-own]')).toBeNull();
+      expect(host.textContent).not.toContain('Nadim Khoury');
+      await settle(fixture);
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(2);
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('Nothing assigned yet');
+      expect(host.querySelector('[data-start-own], [data-max-coach]')).toBeNull();
+      expect(host.querySelector('[data-own-week]')).toBeNull();
+
+      // Back to the house after Max stopped: Self-directed again, and no coach is asked for.
+      profile = finishedProfile({ selfDirected: true });
+      brand.name.set(HOUSE_NAME);
+      tenant.set('tenant-1');
+      await settle(fixture);
+      expect(api.getSelfProfile).toHaveBeenCalledTimes(3);
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(2);
+      expect(host.querySelector('.today-coach[data-self-directed]')).not.toBeNull();
+      expect(host.querySelector('button[data-start-own]')).not.toBeNull();
+      expect(host.querySelector('[data-max-coach], [data-max-message]')).toBeNull();
+      expect(host.querySelector('.today-coach')?.textContent).not.toContain('Nadim Khoury');
     });
   });
 

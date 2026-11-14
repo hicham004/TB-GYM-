@@ -1,3 +1,4 @@
+import { formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import type { ClientEnrollment } from '../../core/api/api.models';
 import type {
@@ -56,6 +57,13 @@ export interface HousePlanAsk {
   readonly state: HousePlanAskState;
   readonly moneySent: HousePlanTransfer | null;
   readonly outcome: HousePlanAskOutcome | null;
+  /**
+   * An open Max ask alone (N9c5a): whether a Max place is open for it, so the trainee may pay; null on a Pro+
+   * ask, a booked or closed one, and from an older answer.
+   */
+  readonly placeOpen: boolean | null;
+  /** An open Max ask of a trainee holding no place: their turn in line, from 1; null otherwise. */
+  readonly placeInLine: number | null;
 }
 
 /** The server's ask with its figures as numbers: the generated type allows a string for each. */
@@ -89,7 +97,16 @@ export function toHousePlanAsk(view: HousePlanAskView): HousePlanAsk {
           decidedByName: view.outcome.decidedByName,
         }
       : null,
+    placeOpen: typeof view.placeOpen === 'boolean' ? view.placeOpen : null,
+    placeInLine: turnOf(view.placeInLine),
   };
+}
+
+/** The turn as a number, whatever form it arrives in; anything but a whole turn from 1 is none. */
+function turnOf(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const turn = Number(value);
+  return Number.isInteger(turn) && turn > 0 ? turn : null;
 }
 
 /**
@@ -105,10 +122,20 @@ export function isOpenAsk(ask: Pick<HousePlanAsk, 'state'>): boolean {
   return ask.state === 'Asked' || ask.state === 'MoneySent';
 }
 
-export function askPill(state: HousePlanAskState): PlanPill {
-  switch (state) {
+/**
+ * A Max ask still open while no place is open for it: the trainee's page says not to send money yet, so it
+ * waits for a place rather than for the money (N9c5a).
+ */
+export function waitsForPlace(ask: Pick<HousePlanAsk, 'state' | 'tier' | 'placeOpen'>): boolean {
+  return ask.state === 'Asked' && ask.tier === 'Max' && ask.placeOpen === false;
+}
+
+export function askPill(ask: Pick<HousePlanAsk, 'state' | 'tier' | 'placeOpen'>): PlanPill {
+  switch (ask.state) {
     case 'Asked':
-      return { label: $localize`Waiting for the money`, tone: 'warm' };
+      return waitsForPlace(ask)
+        ? { label: $localize`Waiting for a place`, tone: 'info' }
+        : { label: $localize`Waiting for the money`, tone: 'warm' };
     case 'MoneySent':
       return { label: $localize`Says it’s sent`, tone: 'info' };
     case 'Booked':
@@ -139,6 +166,8 @@ export interface AskRow {
   /** "USD 47.50 · asked Tue 29 Sep" */
   readonly meta: string;
   readonly pill: PlanPill;
+  /** A current trainee's open Max ask: where it stands in Max's line, or that Max is closed (N9c5a). */
+  readonly place: string | null;
   readonly sent: AskSent | null;
   /** "Booked by Karim Haddad on Sun 20 Sep: runs Sun 20 Sep – Sat 17 Oct." or "Closed by … on …." */
   readonly decided: string | null;
@@ -175,10 +204,34 @@ function decidedLine(
     : $localize`Booked on ${day}:date:: runs ${runs}:dates:.`;
 }
 
-export function askRow(
-  ask: HousePlanAsk,
-  context: Pick<ServiceContext, 'locale' | 'today'>,
-): AskRow {
+/** What the asks are read with: the page's day and words, and whether the record is a former client's. */
+export interface AskContext extends Pick<ServiceContext, 'locale' | 'today' | 'firstName'> {
+  /** A former trainee leaves Max's line, so their open ask reads as if Max were closed: no place line then. */
+  readonly former?: boolean;
+}
+
+/**
+ * Where a current trainee's open Max ask stands (N9c5a). The staff's read cannot tell a full Max from a
+ * closed one for an ask in line, so neither is promised there; a booking says which. Book plan stays
+ * whatever the turn: the server books by the places free, not by the turn.
+ */
+export function placeLine(ask: HousePlanAsk, context: AskContext): string | null {
+  if (ask.tier !== 'Max' || !isOpenAsk(ask) || context.former || ask.placeOpen === null) {
+    return null;
+  }
+  const name = context.firstName;
+  if (ask.placeInLine !== null) {
+    const turn = formatNumber(ask.placeInLine, context.locale, '1.0-0');
+    return ask.placeOpen
+      ? $localize`Number ${turn}:place: in line for Max. A place is open, so ${name}:name: can pay.`
+      : $localize`Number ${turn}:place: in line for Max. No place is open for this ask yet, so ${name}:name:’s page says not to send money.`;
+  }
+  return ask.placeOpen
+    ? $localize`${name}:name: holds a Max place.`
+    : $localize`Max is closed: TB Gym’s settings give it no places.`;
+}
+
+export function askRow(ask: HousePlanAsk, context: AskContext): AskRow {
   const name = askedPlan(ask);
   const price = money(ask.priceAmount, ask.priceCurrency, context.locale);
   const sent = ask.moneySent;
@@ -186,7 +239,8 @@ export function askRow(
     id: ask.id,
     name,
     meta: $localize`${price}:price: · asked ${shortDate(ask.askedOn, context.locale)}:date:`,
-    pill: askPill(ask.state),
+    pill: askPill(ask),
+    place: placeLine(ask, context),
     sent: sent
       ? {
           name: sent.whishName,
@@ -203,10 +257,7 @@ export function askRow(
 }
 
 /** Newest first, as the server lists them; asks of one day keep the server's order. */
-export function askRows(
-  asks: readonly HousePlanAsk[],
-  context: Pick<ServiceContext, 'locale' | 'today'>,
-): AskRow[] {
+export function askRows(asks: readonly HousePlanAsk[], context: AskContext): AskRow[] {
   return [...asks]
     .sort((a, b) => b.askedOn.localeCompare(a.askedOn))
     .map((ask) => askRow(ask, context));
@@ -246,6 +297,19 @@ export function bookingIntro(
 ): string {
   const price = money(ask.priceAmount, ask.priceCurrency, locale);
   return $localize`Check the Whish account for ${price}:price: first. Booking starts ${firstName}:name:’s plan today, or the day after their current plan ends, and records the money as received by Whish today.`;
+}
+
+/**
+ * Said in the booking sheet of a Max ask the trainee was told not to pay yet: a booking still goes by the
+ * money in the Whish account, which they may have sent anyway.
+ */
+export function bookingNoPlace(
+  ask: Pick<HousePlanAsk, 'state' | 'tier' | 'placeOpen'>,
+  firstName: string,
+): string | null {
+  return waitsForPlace(ask)
+    ? $localize`${firstName}:name:’s ask has no Max place yet, so they were told not to send money. Book it only if the money is there.`
+    : null;
 }
 
 export interface BookingValues {
@@ -307,10 +371,24 @@ export function bookingRefusal(error: unknown, firstName: string): Refusal {
 
 /** The ask was booked or closed meanwhile, so what the page lists of it is out of date. */
 export function askEnded(error: unknown): boolean {
+  return refusalCode(error) === 'house_plan_ask_ended';
+}
+
+/**
+ * A booking refused because the ask ended meanwhile, or because Max had no place free or was closed
+ * (N9c5a): the asks' places and turns are out of date too, so the page reads them again.
+ */
+export function asksOutOfDate(error: unknown): boolean {
+  const code = refusalCode(error);
   return (
-    error instanceof HttpErrorResponse &&
-    (error.error as { code?: string } | null)?.code === 'house_plan_ask_ended'
+    code === 'house_plan_ask_ended' || code === 'house_max_full' || code === 'house_max_closed'
   );
+}
+
+function refusalCode(error: unknown): string | null {
+  return error instanceof HttpErrorResponse
+    ? ((error.error as { code?: string } | null)?.code ?? null)
+    : null;
 }
 
 export function closingRefusal(error: unknown, firstName: string): Refusal {

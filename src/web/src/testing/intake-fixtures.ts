@@ -34,8 +34,12 @@ export function newProfile(overrides: Partial<ClientSelfProfile> = {}): ClientSe
     onboardingStatus: 'NotStarted',
     onboardingCompletedAtUtc: null,
     version: 4,
-    // A coach's client; a trainee of TB Gym's own space reads `selfDirected: true` (notes plan N9a2).
+    // Open for a coach's client; closed only for a trainee of TB Gym's own space who is not on Max (N9c5a).
+    healthStepOpen: true,
+    // A coach's client; a trainee of TB Gym's own space reads `selfDirected: true` (notes plan N9a2), and one
+    // Max coaches today `coachedByTheHouse: true` as well (N9c5a).
     selfDirected: false,
+    coachedByTheHouse: false,
     ...overrides,
   };
 }
@@ -87,6 +91,7 @@ export const COACH_USER_ID = '00000000-0000-4000-8000-0000000000aa';
 export function coachView(profile: ClientIntakeProfile = finishedProfile()): CoachClientDetails {
   const answers: ClientSelfProfile = { ...profile };
   delete answers.selfDirected;
+  delete answers.coachedByTheHouse;
   return {
     ...answers,
     userId: 'user-rana',

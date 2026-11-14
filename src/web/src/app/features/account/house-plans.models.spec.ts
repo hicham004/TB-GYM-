@@ -64,6 +64,39 @@ function askView(overrides: Partial<HousePlanAskView> = {}): HousePlanAskView {
 
 const ask = (overrides: Partial<HousePlanAskView> = {}): HouseAsk => toHouseAsk(askView(overrides));
 
+/** A month of Max, as the house sells it: the four features TB Gym coaches (N9c5a). */
+const maxOfferView = (overrides: Partial<HousePlanOfferView> = {}): HousePlanOfferView =>
+  offerView({
+    offerId: 'max-1m',
+    productId: 'max',
+    tier: 'Max',
+    name: 'Max',
+    description: null,
+    optionLabel: 'A month',
+    priceAmount: '120',
+    durationCount: 4,
+    durationUnit: 'Week',
+    features: ['Training', 'Nutrition', 'CheckIns', 'Messaging'],
+    ...overrides,
+  });
+
+const maxAsk = (overrides: Partial<HousePlanAskView> = {}): HouseAsk =>
+  ask({
+    offerId: 'max-1m',
+    tier: 'Max',
+    planName: 'Max',
+    optionLabel: 'A month',
+    priceAmount: '120',
+    durationCount: 4,
+    durationUnit: 'Week',
+    ...overrides,
+  });
+
+const MAX_FULL =
+  'Every place on Max is taken right now. You can still ask: your ask waits in line, and you send money only once a place opens for you.';
+const MAX_NOT_OPEN =
+  'A Max place isn’t open for you yet. Your ask is kept in line; don’t send money until a place opens.';
+
 const offers = (...views: HousePlanOfferView[]) =>
   toHousePlans({ today: TODAY, asksOpen: true, whishNumber: null, plans: views, asks: [] }).plans;
 
@@ -87,6 +120,42 @@ describe('toHousePlans', () => {
       description: null,
     });
     expect(house.asks[0]).toMatchObject({ priceAmount: 47.5, durationCount: 4, state: 'Asked' });
+  });
+
+  it('reads whether Max has a place for the trainee, on its options and its open asks alone (N9c5a)', () => {
+    const house = toHousePlans({
+      today: TODAY,
+      asksOpen: true,
+      whishNumber: null,
+      plans: [
+        offerView(),
+        offerView({ offerId: 'offer-pro', placeOpen: null }),
+        maxOfferView({ placeOpen: false }),
+        maxOfferView({ offerId: 'max-3m', placeOpen: true }),
+      ],
+      asks: [
+        askView(),
+        askView({ id: 'pro-null', placeOpen: null }),
+        askView({ id: 'max-waits', tier: 'Max', placeOpen: false, placeInLine: 3 }),
+        askView({ id: 'max-open', tier: 'Max', placeOpen: true }),
+      ],
+    });
+
+    // Pro+ never says, whether the field is left out or null.
+    expect(house.plans.map((offer) => [offer.tier, offer.placeOpen])).toEqual([
+      ['ProPlus', null],
+      ['ProPlus', null],
+      ['Max', false],
+      ['Max', true],
+    ]);
+    expect(house.asks.map((ask) => [ask.tier, ask.placeOpen])).toEqual([
+      ['ProPlus', null],
+      ['ProPlus', null],
+      ['Max', false],
+      ['Max', true],
+    ]);
+    // The trainee never reads their turn in line, even if a read carried it.
+    expect(Object.keys(house.asks[2])).not.toContain('placeInLine');
   });
 
   it('keeps no Whish number when the house has none', () => {
@@ -172,6 +241,49 @@ describe('planGroups', () => {
   it('has nothing to group when nothing is on sale', () => {
     expect(planGroups([], LOCALE)).toEqual([]);
   });
+
+  it('says once, on the plan, that every place on Max is taken, and asking stays open (N9c5a)', () => {
+    const groups = planGroups(
+      offers(
+        maxOfferView({ placeOpen: false }),
+        maxOfferView({
+          offerId: 'max-3m',
+          optionLabel: '3 months',
+          durationCount: 12,
+          placeOpen: false,
+        }),
+        offerView(),
+      ),
+      LOCALE,
+    );
+
+    expect(groups.map((group) => [group.name, group.placeLine])).toEqual([
+      ['Max', MAX_FULL],
+      ['Pro+', null],
+    ]);
+    expect(groups[0].includes?.map((chip) => chip.label)).toEqual([
+      'Training',
+      'Nutrition',
+      'Check-ins',
+      'Messaging',
+    ]);
+    // Every option keeps its Ask for, named as before.
+    expect(groups[0].options.map((option) => option.askName)).toEqual([
+      'Ask for A month, Max',
+      'Ask for 3 months, Max',
+    ]);
+    expect(groups[0].options[0]).not.toHaveProperty('placeLine');
+  });
+
+  it('says nothing of places while one is open, or for an answer that does not say', () => {
+    for (const placeOpen of [true, null, undefined]) {
+      const view = maxOfferView({ placeOpen });
+      if (placeOpen === undefined) delete view.placeOpen;
+      const [group] = planGroups(offers(view), LOCALE);
+
+      expect(group.placeLine, String(placeOpen)).toBeNull();
+    }
+  });
 });
 
 describe('the asks', () => {
@@ -180,6 +292,13 @@ describe('the asks', () => {
     expect(askPill('MoneySent')).toEqual({ label: 'Money sent', tone: 'info' });
     expect(askPill('Booked')).toEqual({ label: 'Booked', tone: 'success' });
     expect(askPill('Closed')).toEqual({ label: 'Closed', tone: 'neutral' });
+  });
+
+  it('says an asked Max ask with no place open waits for a place, never for the payment (N9c5a)', () => {
+    expect(askPill('Asked', false)).toEqual({ label: 'Waiting for a place', tone: 'info' });
+    expect(askPill('Asked', true)).toEqual({ label: 'Waiting for your payment', tone: 'warm' });
+    expect(askPill('Asked', null)).toEqual({ label: 'Waiting for your payment', tone: 'warm' });
+    expect(askPill('MoneySent', false)).toEqual({ label: 'Money sent', tone: 'info' });
   });
 
   it('finds the one ask still waiting on TB Gym, and the ones it booked or closed', () => {
@@ -210,7 +329,55 @@ describe('the asks', () => {
       cost: 'USD 89.75 for 8 weeks',
       pill: { label: 'Waiting for your payment', tone: 'warm' },
       sent: null,
+      waitingForPlace: false,
+      placeLine: null,
+      placeOpenLine: null,
     });
+  });
+
+  it('words an asked Max ask with no place open as waiting in line, with nothing to pay yet (N9c5a)', () => {
+    expect(openAskCard(maxAsk({ placeOpen: false }), TODAY, LOCALE)).toEqual({
+      id: 'ask-1',
+      state: 'Asked',
+      planName: 'Max',
+      optionLabel: 'A month',
+      price: 'USD 120',
+      cost: 'USD 120 for 4 weeks',
+      pill: { label: 'Waiting for a place', tone: 'info' },
+      sent: null,
+      waitingForPlace: true,
+      placeLine: MAX_NOT_OPEN,
+      placeOpenLine: null,
+    });
+  });
+
+  it('words an asked Max ask whose place is open as Pro+’s, saying the place is open', () => {
+    const card = openAskCard(maxAsk({ placeOpen: true }), TODAY, LOCALE);
+
+    expect(card.pill).toEqual({ label: 'Waiting for your payment', tone: 'warm' });
+    expect(card.waitingForPlace).toBe(false);
+    expect(card.placeLine).toBeNull();
+    expect(card.placeOpenLine).toBe('A place on Max is open for you now.');
+  });
+
+  it('words a Max ask said paid as any ask said paid, whatever its place reads', () => {
+    for (const placeOpen of [true, false]) {
+      const card = openAskCard(
+        maxAsk({
+          state: 'MoneySent',
+          placeOpen,
+          moneySent: { whishName: 'Rima Aboud', whishNumber: '+961 71 234567', sentOn: TODAY },
+        }),
+        TODAY,
+        LOCALE,
+      );
+
+      expect(card.pill).toEqual({ label: 'Money sent', tone: 'info' });
+      expect(card.waitingForPlace).toBe(false);
+      expect(card.placeLine).toBeNull();
+      expect(card.placeOpenLine).toBeNull();
+      expect(card.sent?.name).toBe('Rima Aboud');
+    }
   });
 
   it('says the length once when the option’s name is the length, as the options on sale do', () => {
@@ -351,6 +518,11 @@ describe('houseRefusal', () => {
       'client_blocked',
       'house_plan_money_already_sent',
       'house_plan_ask_ended',
+      // Max's places (N9c5a): no place open yet for "I've paid", Max closed, and any other of its codes.
+      'house_max_place_not_open',
+      'house_max_closed',
+      'house_max_full',
+      'house_max_by_ask',
     ]) {
       expect(houseRefusal(conflict(code, `The server says ${code}.`), 'Try again.')).toEqual({
         message: `The server says ${code}.`,
@@ -359,6 +531,26 @@ describe('houseRefusal', () => {
         stale: true,
       });
     }
+  });
+
+  it('says Max’s refusals of "I’ve paid" in the server’s own words (N9c5a)', () => {
+    const notOpen = houseRefusal(conflict('house_max_place_not_open', MAX_NOT_OPEN), 'Try again.');
+    const closed = houseRefusal(
+      conflict(
+        'house_max_closed',
+        'Max isn’t taking anyone right now. Your ask is kept; don’t send money until it opens again.',
+      ),
+      'Try again.',
+    );
+
+    expect(notOpen).toMatchObject({ message: MAX_NOT_OPEN, stale: true });
+    expect(closed).toMatchObject({
+      message:
+        'Max isn’t taking anyone right now. Your ask is kept; don’t send money until it opens again.',
+      stale: true,
+    });
+    // A code that only looks like one is not marked out of date.
+    expect(houseRefusal(conflict('house_maximum', 'No.'), 'Try again.').stale).toBe(false);
   });
 
   it('puts a Whish detail the server refused under its field', () => {

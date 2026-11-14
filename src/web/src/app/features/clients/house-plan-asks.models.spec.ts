@@ -8,6 +8,7 @@ import {
   housePlanAsk,
   SERVICE_TODAY,
 } from '../../../testing/client-service-fixtures';
+import { maxAsk } from '../../../testing/max-staff-fixtures';
 import {
   amountInput,
   askedPlan,
@@ -15,17 +16,20 @@ import {
   askPill,
   askRow,
   askRows,
+  asksOutOfDate,
   bookingErrors,
   bookingIntro,
   bookingLine,
+  bookingNoPlace,
   bookingRefusal,
   closingRefusal,
   isHouseTrainee,
   isOpenAsk,
+  placeLine,
   toHousePlanAsk,
 } from './house-plan-asks.models';
 
-const CONTEXT = { locale: 'en-US', today: SERVICE_TODAY };
+const CONTEXT = { locale: 'en-US', today: SERVICE_TODAY, firstName: 'Maya' };
 
 const refusal = (status: number, error: unknown) => new HttpErrorResponse({ status, error });
 
@@ -41,6 +45,31 @@ describe('a house trainee’s asks for a plan (SUB-020)', () => {
       sentOn: '2026-09-30',
     });
     expect(ask.outcome).toBeNull();
+    // A Pro+ ask, and an older answer, carry no place of Max's.
+    expect([ask.placeOpen, ask.placeInLine]).toEqual([null, null]);
+  });
+
+  it('reads a Max ask’s place and turn, the turn as a number whatever form it arrives in (N9c5a)', () => {
+    expect(
+      [
+        maxAsk(),
+        maxAsk({ placeInLine: '3' }),
+        maxAsk({ placeOpen: true, placeInLine: null }),
+        maxAsk({ placeOpen: null, placeInLine: undefined }),
+        maxAsk({ placeInLine: 'soon' }),
+        maxAsk({ placeInLine: 0 }),
+      ].map((view) => {
+        const ask = toHousePlanAsk(view);
+        return [ask.tier, ask.placeOpen, ask.placeInLine];
+      }),
+    ).toEqual([
+      ['Max', false, 2],
+      ['Max', false, 3],
+      ['Max', true, null],
+      ['Max', null, null],
+      ['Max', false, null],
+      ['Max', false, null],
+    ]);
   });
 
   it('knows a house trainee by the house’s Free alone', () => {
@@ -55,7 +84,7 @@ describe('a house trainee’s asks for a plan (SUB-020)', () => {
     expect(
       (['Asked', 'MoneySent', 'Booked', 'Closed'] as const).map((state) => [
         isOpenAsk({ state }),
-        askPill(state),
+        askPill({ state, tier: 'ProPlus', placeOpen: null }),
       ]),
     ).toEqual([
       [true, { label: 'Waiting for the money', tone: 'warm' }],
@@ -63,6 +92,79 @@ describe('a house trainee’s asks for a plan (SUB-020)', () => {
       [false, { label: 'Booked', tone: 'success' }],
       [false, { label: 'Closed', tone: 'neutral' }],
     ]);
+  });
+
+  it('says a Max ask waits for a place while none is open for it, and for the money once one is', () => {
+    const pill = (view: ReturnType<typeof maxAsk>) => askPill(toHousePlanAsk(view));
+
+    expect(pill(maxAsk())).toEqual({ label: 'Waiting for a place', tone: 'info' });
+    expect(pill(maxAsk({ placeOpen: true, placeInLine: 1 }))).toEqual({
+      label: 'Waiting for the money',
+      tone: 'warm',
+    });
+    // Said sent, booked or closed: the pill says so whatever Max's places.
+    expect(pill(maxAsk({ state: 'MoneySent', placeInLine: null }))).toEqual({
+      label: 'Says it’s sent',
+      tone: 'info',
+    });
+    expect(pill(maxAsk({ state: 'Closed', placeOpen: null, placeInLine: null })).label).toBe(
+      'Closed',
+    );
+    // An older answer without Max's places reads as before.
+    expect(pill(maxAsk({ placeOpen: undefined, placeInLine: undefined })).label).toBe(
+      'Waiting for the money',
+    );
+  });
+
+  describe('a Max ask’s place (N9c5a)', () => {
+    const line = (view: ReturnType<typeof maxAsk>, former = false) =>
+      placeLine(toHousePlanAsk(view), { ...CONTEXT, former });
+
+    it('says where a current trainee’s open Max ask stands in line, and whether they can pay', () => {
+      expect(line(maxAsk({ placeOpen: true, placeInLine: 1 }))).toBe(
+        'Number 1 in line for Max. A place is open, so Maya can pay.',
+      );
+      expect(line(maxAsk())).toBe(
+        'Number 2 in line for Max. No place is open for this ask yet, so Maya’s page says not to send money.',
+      );
+      expect(line(maxAsk({ placeInLine: 1200 }))).toBe(
+        'Number 1,200 in line for Max. No place is open for this ask yet, so Maya’s page says not to send money.',
+      );
+    });
+
+    it('says a trainee holds a place, or that Max is closed, once they are out of the line', () => {
+      expect(line(maxAsk({ state: 'MoneySent', placeOpen: true, placeInLine: null }))).toBe(
+        'Maya holds a Max place.',
+      );
+      expect(line(maxAsk({ placeOpen: false, placeInLine: null }))).toBe(
+        'Max is closed: TB Gym’s settings give it no places.',
+      );
+    });
+
+    it('says nothing for a Pro+ ask, an ended ask, a former trainee or an older answer', () => {
+      expect(line(housePlanAsk({ placeOpen: false, placeInLine: 2 }))).toBeNull();
+      expect(line(maxAsk({ state: 'Booked' }))).toBeNull();
+      expect(line(maxAsk({ state: 'Closed' }))).toBeNull();
+      // A released trainee leaves the line, so their open ask would read as Max closed.
+      expect(line(maxAsk({ placeOpen: false, placeInLine: null }), true)).toBeNull();
+      expect(line(maxAsk({ placeOpen: true, placeInLine: 1 }), true)).toBeNull();
+      expect(line(maxAsk({ placeOpen: undefined, placeInLine: undefined }))).toBeNull();
+    });
+
+    it('puts the line on the ask’s row, and none on a former trainee’s', () => {
+      const ask = toHousePlanAsk(maxAsk());
+      const row = askRow(ask, CONTEXT);
+      expect([row.name, row.meta, row.pill.label, row.place, row.open]).toEqual([
+        'Max coaching, 4 weeks',
+        'USD 120 · asked Tue 29 Sep',
+        'Waiting for a place',
+        'Number 2 in line for Max. No place is open for this ask yet, so Maya’s page says not to send money.',
+        true,
+      ]);
+      // Book plan stays: the server books by the places free, not by the turn.
+      expect(row.bookLabel).toBe('Book plan, Max coaching, 4 weeks');
+      expect(askRows([ask], { ...CONTEXT, former: true })[0].place).toBeNull();
+    });
   });
 
   it('names the plan and the option asked for, its price and the day it was asked', () => {
@@ -73,6 +175,7 @@ describe('a house trainee’s asks for a plan (SUB-020)', () => {
       name: 'Pro+ Programs, 4 weeks',
       meta: 'USD 47.50 · asked Tue 29 Sep',
       pill: { label: 'Waiting for the money', tone: 'warm' },
+      place: null,
       sent: null,
       decided: null,
       reason: null,
@@ -179,6 +282,35 @@ describe('a house trainee’s asks for a plan (SUB-020)', () => {
       );
     });
 
+    it('warns before booking a Max ask whose trainee was told not to pay yet (N9c5a)', () => {
+      expect(bookingNoPlace(toHousePlanAsk(maxAsk()), 'Maya')).toBe(
+        'Maya’s ask has no Max place yet, so they were told not to send money. Book it only if the money is there.',
+      );
+      expect(
+        bookingNoPlace(toHousePlanAsk(maxAsk({ placeOpen: true, placeInLine: 1 })), 'Maya'),
+      ).toBeNull();
+      // Said sent: the money is there to look for, whatever Max's places.
+      expect(
+        bookingNoPlace(
+          toHousePlanAsk(maxAsk({ state: 'MoneySent', placeOpen: false, placeInLine: null })),
+          'Maya',
+        ),
+      ).toBeNull();
+      expect(bookingNoPlace(ask, 'Maya')).toBeNull();
+    });
+
+    it('says Max’s refusals in the server’s words, in the summary', () => {
+      const full = 'Every place on Max is taken. Book this ask once a place opens, or close it.';
+      const closed =
+        "Max is closed: TB Gym's settings give it no places. Book this ask once Max opens again, or close it.";
+      expect(
+        bookingRefusal(refusal(409, { code: 'house_max_full', message: full }), 'Maya'),
+      ).toEqual({ field: null, message: full });
+      expect(
+        bookingRefusal(refusal(409, { code: 'house_max_closed', message: closed }), 'Maya'),
+      ).toEqual({ field: null, message: closed });
+    });
+
     it('fills the amount with the price asked for, with its cents only when it has some', () => {
       expect(amountInput(47.5)).toBe('47.50');
       expect(amountInput(89.75)).toBe('89.75');
@@ -270,6 +402,25 @@ describe('a house trainee’s asks for a plan (SUB-020)', () => {
     );
     expect(askEnded(refusal(400, null))).toBe(false);
     expect(askEnded(new Error('offline'))).toBe(false);
+  });
+
+  it('knows a booking refused for Max’s places leaves the asks out of date too (N9c5a)', () => {
+    const stale = (code: string) => asksOutOfDate(refusal(409, { code, message: 'x' }));
+
+    expect(['house_plan_ask_ended', 'house_max_full', 'house_max_closed'].map(stale)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect(['entitlement_overlap', 'client_blocked', 'house_max_by_ask'].map(stale)).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    expect(asksOutOfDate(refusal(400, null))).toBe(false);
+    expect(asksOutOfDate(new Error('offline'))).toBe(false);
+    // Closing keeps to its own: Max never refuses it.
+    expect(askEnded(refusal(409, { code: 'house_max_full', message: 'x' }))).toBe(false);
   });
 
   it('puts the server’s word on a closing’s reason under it, and anything else in the summary', () => {

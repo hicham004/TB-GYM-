@@ -17,6 +17,7 @@ import {
 import {
   allMaxesTyped,
   blockLine,
+  coachedOnMax,
   liftList,
   maxDetail,
   maxHelp,
@@ -136,6 +137,18 @@ describe('toHousePrograms', () => {
         ),
       ),
     ).toBe(false);
+  });
+
+  it('speaks of Max with no Pro+ pass to a trainee Max coaches alone, never under a pass or unread (N9c5b)', () => {
+    const free = toHousePrograms(housePrograms({ running: runningBlock() }));
+    const passed = toHousePrograms(underPass());
+    expect(coachedOnMax(free, true)).toBe(true);
+    // A running Pro+ pass keeps its card: the trainee may still start under it.
+    expect(coachedOnMax(passed, true)).toBe(false);
+    // Not coached, or the profile not read: Free's words.
+    expect(coachedOnMax(free, false)).toBe(false);
+    expect(coachedOnMax(free, null)).toBe(false);
+    expect(coachedOnMax(passed, null)).toBe(false);
   });
 
   it('says Training is closed when the server refuses the programs for that', () => {

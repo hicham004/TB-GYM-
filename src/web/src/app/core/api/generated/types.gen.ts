@@ -1085,6 +1085,8 @@ export type ClientSelfProfile = {
   onboardingCompletedAtUtc: null | string;
   version: number | string;
   selfDirected?: boolean;
+  coachedByTheHouse?: boolean;
+  healthStepOpen?: boolean;
 };
 
 export type ClientSessionState = 'Completed' | 'InProgress' | 'Missed' | 'Today' | 'Upcoming';
@@ -1442,6 +1444,7 @@ export type CoachClientDetails = {
   assignedCoachName: string;
   release?: null | ClientReleaseView;
   mayCoach?: boolean;
+  healthStepOpen?: boolean;
 };
 
 export type CoachClientProgramView = {
@@ -2602,6 +2605,8 @@ export type HousePlanAskView = {
   state: HousePlanAskState;
   moneySent: null | HousePlanTransferView;
   outcome: null | HousePlanAskOutcomeView;
+  placeOpen?: null | boolean;
+  placeInLine?: null | number | string;
 };
 
 export type HousePlanMoneySentRequest = {
@@ -2621,6 +2626,7 @@ export type HousePlanOfferView = {
   durationCount: number | string;
   durationUnit: OfferDurationUnit;
   features: Array<CoachingFeature>;
+  placeOpen?: null | boolean;
 };
 
 export type HousePlansView = {
@@ -2735,7 +2741,8 @@ export type HouseSetting =
   | 'MinimumSignUpAge'
   | 'FreeProgressDays'
   | 'MediaStorageGigabytes'
-  | 'WhishNumber';
+  | 'WhishNumber'
+  | 'MaxPlaces';
 
 export type HouseSettingView = {
   setting: HouseSetting;

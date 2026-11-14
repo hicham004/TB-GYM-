@@ -35,10 +35,13 @@ import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { ProductsApi } from './products-api';
 import {
+  emptyMaxOption,
   emptyOption,
   emptyPackOption,
   FEATURES,
   featureChip,
+  MAX_FEATURES,
+  maxFeaturesRefusal,
   type FieldMessages,
   offerLength,
   optionErrors,
@@ -290,10 +293,8 @@ export type ProductSheetMode =
       }
 
       <ng-template #included>
-        <fieldset
-          class="features"
-          [attr.aria-describedby]="shows('features') ? 'plan-features-error' : null"
-        >
+        @let featuresProblem = shows('features') ? errors()['features'][0] : featuresRefused();
+        <fieldset class="features" [attr.aria-describedby]="featuresDescribedBy(featuresProblem)">
           <legend i18n>What’s included</legend>
           @if (isPack()) {
             <app-checkbox [label]="sessionsChip.label">
@@ -302,24 +303,39 @@ export type ProductSheetMode =
           }
           @for (chip of featureChips; track chip.feature) {
             <app-checkbox [label]="chip.label">
-              <input
-                appControl
-                type="checkbox"
-                [checked]="option().features.includes(chip.feature)"
-                (change)="toggleFeature(chip.feature, $any($event.target).checked)"
-              />
+              @if (isMax()) {
+                <!-- A Max plan covers its four, and only them (N9c5a): ticked and locked. -->
+                <input
+                  appControl
+                  type="checkbox"
+                  [checked]="maxFeatures.includes(chip.feature)"
+                  disabled
+                />
+              } @else {
+                <input
+                  appControl
+                  type="checkbox"
+                  [checked]="option().features.includes(chip.feature)"
+                  (change)="toggleFeature(chip.feature, $any($event.target).checked)"
+                />
+              }
             </app-checkbox>
           }
         </fieldset>
-        @if (shows('features')) {
-          <p id="plan-features-error" class="warn-text">{{ errors()['features'][0] }}</p>
+        @if (isMax()) {
+          <p id="plan-features-max" class="muted" i18n>
+            A Max plan covers Training, Nutrition, Check-ins and Messaging, all four.
+          </p>
+        }
+        @if (featuresProblem) {
+          <p id="plan-features-error" class="warn-text" dir="auto">{{ featuresProblem }}</p>
         }
       </ng-template>
 
       <app-form-summary>
         @if (error(); as message) {
           {{ message }}
-        } @else if (attempt.wasTried() && problemCount() > 0) {
+        } @else if ((attempt.wasTried() && problemCount() > 0) || featuresRefused()) {
           <ng-container i18n>Check the fields marked above.</ng-container>
         }
       </app-form-summary>
@@ -514,13 +530,22 @@ export class ProductSheet {
     () => this.product()?.kind ?? 'CoachingPlan',
   );
   protected readonly isPack = computed(() => this.planKind() === 'SessionPack');
+  /** The house's Max plan (N9c5a): its price options cover exactly its four, locked on the sheet. */
+  protected readonly isMax = computed(() => this.product()?.houseTier === 'Max');
+  protected readonly maxFeatures = MAX_FEATURES;
+  /** The server's sentence on what a Max option includes, said under What's included until the next try. */
+  protected readonly featuresRefused = signal<string | null>(null);
   /** A pack's length follows its count until the coach sets it. */
   private lengthSet = false;
 
   protected readonly name = linkedSignal(() => this.product()?.name ?? '');
   protected readonly description = linkedSignal(() => this.product()?.description ?? '');
   protected readonly option = linkedSignal<OptionValues>(() =>
-    this.isPack() ? emptyPackOption(this.currency()) : emptyOption(this.currency()),
+    this.isPack()
+      ? emptyPackOption(this.currency())
+      : this.isMax()
+        ? emptyMaxOption(this.currency())
+        : emptyOption(this.currency()),
   );
   protected readonly newPrice = linkedSignal<number | null>(() => {
     const mode = this.mode();
@@ -642,6 +667,12 @@ export class ProductSheet {
     return this.attempt.shows(field, this.errors()[field] ?? []);
   }
 
+  /** What's included points at a Max plan's line and at the reason it was refused, when either shows. */
+  protected featuresDescribedBy(problem: string | null): string | null {
+    const ids = [this.isMax() ? 'plan-features-max' : null, problem ? 'plan-features-error' : null];
+    return ids.filter((id) => id !== null).join(' ') || null;
+  }
+
   protected async submit(): Promise<void> {
     if (this.busy()) return;
     return this.scope.run('submit', async (owner) => {
@@ -652,7 +683,7 @@ export class ProductSheet {
         afterNextRender(
           () => {
             const wrong = this.host.nativeElement.querySelector<HTMLElement>(
-              '[aria-invalid="true"], fieldset[aria-describedby] input',
+              '[aria-invalid="true"], fieldset[aria-describedby~="plan-features-error"] input',
             );
             if (wrong) wrong.focus();
             else this.summary().focus();
@@ -663,6 +694,7 @@ export class ProductSheet {
       }
       this.busy.set(true);
       this.error.set(null);
+      this.featuresRefused.set(null);
       try {
         await owner.wait(this.csrf.refresh());
         const saved = await owner.wait(firstValueFrom(this.request()));
@@ -670,7 +702,10 @@ export class ProductSheet {
         this.closed.emit(saved);
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(productWriteError(error, this.planKind()));
+        // A Max option refused for what it includes is said under What's included, in the server's words.
+        const features = this.isMax() ? maxFeaturesRefusal(error) : null;
+        this.featuresRefused.set(features);
+        this.error.set(features ? null : productWriteError(error, this.planKind()));
         // At the foot of a long sheet the refusal may be scrolled out of view: focus brings it up.
         this.summary().focus();
       } finally {

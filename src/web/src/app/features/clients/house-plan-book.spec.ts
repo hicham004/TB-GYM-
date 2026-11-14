@@ -7,6 +7,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { bookedAsk, housePlanAsk } from '../../../testing/client-service-fixtures';
 import { announced, button, field, fill, formSummary, press, settle } from '../../../testing/dom';
+import { maxAsk } from '../../../testing/max-staff-fixtures';
 import { HousePlanAsksApi } from './house-plan-asks-api';
 import { toHousePlanAsk, type HousePlanAsk } from './house-plan-asks.models';
 import { HousePlanBook } from './house-plan-book';
@@ -274,6 +275,77 @@ describe('Book the plan (SUB-020)', () => {
       'Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.',
     );
     expect(stale).toHaveBeenCalledTimes(1);
+  });
+
+  describe('a Max ask (N9c5a)', () => {
+    const NO_PLACE =
+      'Maya’s ask has no Max place yet, so they were told not to send money. Book it only if the money is there.';
+
+    it('warns that the trainee was told not to pay while no place is open, and books anyway', async () => {
+      const { fixture, host, api } = await render(toHousePlanAsk(maxAsk()));
+
+      expect(textOf(host.querySelector('.plan-line'))).toBe('Max coaching, 4 weeks');
+      expect(textOf(host.querySelector('[data-no-place]'))).toBe(NO_PLACE);
+      expect(host.querySelector('[data-no-place]')?.getAttribute('dir')).toBe('auto');
+      expect(host.querySelector('.sent')).toBeNull();
+      expect(field(host, 'Amount received').value).toBe('120');
+      press(host, 'Book plan');
+      await settle(fixture);
+      expect(api.book).toHaveBeenCalledWith(
+        'client-1',
+        'ask-max',
+        expect.objectContaining({ amount: 120, currencyCode: 'USD' }),
+      );
+    });
+
+    it('says nothing of a place once one is open, or once the money is said sent', async () => {
+      const open = await render(toHousePlanAsk(maxAsk({ placeOpen: true, placeInLine: 1 })));
+      expect(open.host.querySelector('[data-no-place]')).toBeNull();
+      open.host.remove();
+      TestBed.resetTestingModule();
+
+      const sent = await render(
+        toHousePlanAsk(
+          maxAsk({
+            state: 'MoneySent',
+            placeOpen: false,
+            placeInLine: null,
+            moneySent: { whishName: 'Maya Fakhoury', whishNumber: null, sentOn: '2026-09-30' },
+          }),
+        ),
+      );
+      expect(sent.host.querySelector('[data-no-place]')).toBeNull();
+      expect(textOf(sent.host.querySelector('.sent'))).toBe(
+        'Maya says they sent it on Wed 30 Sep.',
+      );
+    });
+
+    it('says a full or closed Max in the server’s words, and tells the page its asks are out of date', async () => {
+      const full = 'Every place on Max is taken. Book this ask once a place opens, or close it.';
+      const closed =
+        "Max is closed: TB Gym's settings give it no places. Book this ask once Max opens again, or close it.";
+      const refused = (code: string, message: string) =>
+        throwError(() => new HttpErrorResponse({ status: 409, error: { code, message } }));
+      const book = vi
+        .fn()
+        .mockReturnValueOnce(refused('house_max_full', full))
+        .mockReturnValueOnce(refused('house_max_closed', closed));
+      const { fixture, host, stale, closed: done } = await render(toHousePlanAsk(maxAsk()), book);
+
+      press(host, 'Book plan');
+      await settle(fixture);
+      expect(textOf(formSummary(host))).toBe(full);
+      expect(document.activeElement).toBe(formSummary(host));
+      expect(stale).toHaveBeenCalledTimes(1);
+      // A 409 marks no field: the amount was right.
+      expect(field(host, 'Amount received').getAttribute('aria-invalid')).not.toBe('true');
+
+      press(host, 'Book plan');
+      await settle(fixture);
+      expect(textOf(formSummary(host))).toBe(closed);
+      expect(stale).toHaveBeenCalledTimes(2);
+      expect(done).not.toHaveBeenCalled();
+    });
   });
 
   it('tells the page when something is typed, and closes on Not now without booking', async () => {

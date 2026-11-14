@@ -267,6 +267,33 @@ export function emptyOption(currency: string): OptionValues {
   };
 }
 
+/** What a Max plan covers, exactly and all four (N9c5a): the server refuses any other set. */
+export const MAX_FEATURES: readonly CoachingFeature[] = [
+  'Training',
+  'Nutrition',
+  'CheckIns',
+  'Messaging',
+];
+
+/** Another price option for the house's Max plan: its four, which the coach cannot change. */
+export function emptyMaxOption(currency: string): OptionValues {
+  return { ...emptyOption(currency), features: MAX_FEATURES };
+}
+
+/**
+ * A Max plan's option refused for what it includes (N9c5a), in the server's sentence: a 400 on `offer`
+ * when an option is added, on `product` when a plan is made. Null for anything else.
+ */
+export function maxFeaturesRefusal(error: unknown): string | null {
+  if (!(error instanceof HttpErrorResponse) || error.status !== 400) return null;
+  const errors = (error.error as { errors?: Record<string, string[]> } | null)?.errors;
+  for (const key of ['offer', 'Offer', 'product', 'Product']) {
+    const message = errors?.[key]?.[0];
+    if (message) return message;
+  }
+  return null;
+}
+
 /** A pack's first option: ten sessions over 90 days, and nothing else ticked (SES-001). */
 export function emptyPackOption(currency: string): OptionValues {
   return {

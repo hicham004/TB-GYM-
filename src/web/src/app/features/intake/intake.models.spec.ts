@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { describe, expect, it } from 'vitest';
 import {
   finishedProfile,
@@ -12,19 +13,28 @@ import {
   followSaved,
   groupTitle,
   hasChanges,
+  healthClosedNote,
+  healthClosedRefusal,
+  healthOpen,
   heightCentimeters,
+  intakeGroups,
+  intakeSteps,
+  isHealthStepClosed,
   isStepDone,
   listWords,
   mergeSteps,
   missingForSetup,
   setupItemLabel,
+  stepAfter,
   stepErrors,
   stepLede,
   stepName,
+  stepShown,
   toCompleteRequest,
   toUpdateRequest,
   valuesFromProfile,
   weightKilograms,
+  withSavedHealth,
   type IntakeValues,
 } from './intake.models';
 
@@ -161,6 +171,127 @@ describe('where a person picks up', () => {
       'date of birth, a goal, and starting weight',
     );
     expect(setupItemLabel('weight')).toBe('starting weight');
+  });
+});
+
+describe('a closed Health step (a trainee of TB Gym’s own space off Max, N9c5a)', () => {
+  const closed = (overrides: Parameters<typeof finishedProfile>[0] = {}) =>
+    finishedProfile({ selfDirected: true, healthStepOpen: false, ...overrides });
+  const nothingSaved = { allergies: null, medications: null, previousInjuries: null };
+
+  it('reads open unless the read says closed, so an older answer without the field stays open', () => {
+    expect(healthOpen(newProfile())).toBe(true);
+    expect(healthOpen(closed())).toBe(false);
+    const older = { ...newProfile() } as Partial<ReturnType<typeof newProfile>>;
+    delete older.healthStepOpen;
+    expect(healthOpen(older as ReturnType<typeof newProfile>)).toBe(true);
+  });
+
+  it('has five steps while open and four without Health while closed', () => {
+    expect(intakeSteps(true)).toEqual(['about', 'goal', 'life', 'health', 'start']);
+    expect(intakeSteps(false)).toEqual(['about', 'goal', 'life', 'start']);
+  });
+
+  it('keeps the Health card while open, or closed with answers saved, and drops it with none', () => {
+    expect(intakeGroups(finishedProfile())).toEqual(['about', 'goal', 'life', 'health']);
+    expect(intakeGroups(finishedProfile(nothingSaved))).toEqual([
+      'about',
+      'goal',
+      'life',
+      'health',
+    ]);
+    expect(intakeGroups(closed())).toEqual(['about', 'goal', 'life', 'health']);
+    expect(intakeGroups(closed({ ...nothingSaved, medications: 'Ventolin' }))).toEqual([
+      'about',
+      'goal',
+      'life',
+      'health',
+    ]);
+    expect(intakeGroups(closed(nothingSaved))).toEqual(['about', 'goal', 'life']);
+    // A blank answer is nothing saved.
+    expect(intakeGroups(closed({ ...nothingSaved, allergies: '  ' }))).toEqual([
+      'about',
+      'goal',
+      'life',
+    ]);
+  });
+
+  it('picks up past Health while it is closed', () => {
+    const halfway = (overrides: Parameters<typeof halfwayProfile>[0] = {}) =>
+      halfwayProfile({ selfDirected: true, healthStepOpen: false, ...overrides });
+
+    expect(firstOpenStep(halfway())).toBe('life');
+    expect(firstOpenStep(halfway({ workType: 'Teacher' }))).toBe('start');
+    expect(firstOpenStep(newProfile({ healthStepOpen: false }))).toBe('about');
+    // On Max the step is open again, and an empty one is where they pick up.
+    expect(firstOpenStep(halfwayProfile({ selfDirected: true, workType: 'Teacher' }))).toBe(
+      'health',
+    );
+  });
+
+  it('moves on from a step that has gone, never to one that is not there', () => {
+    const four = intakeSteps(false);
+    const five = intakeSteps(true);
+
+    expect(stepShown('health', four)).toBe('start');
+    expect(stepShown('life', four)).toBe('life');
+    expect(stepShown('health', five)).toBe('health');
+    expect(stepAfter('life', four)).toBe('start');
+    expect(stepAfter('life', five)).toBe('health');
+    expect(stepAfter('health', four)).toBe('start');
+    expect(stepAfter('start', four)).toBeNull();
+  });
+
+  it('sends the saved health answers back as they are, never emptied and never what was typed', () => {
+    const profile = closed();
+    const saved = valuesFromProfile(profile, DEFAULTS);
+    const emptied = typed({ allergies: '', previousInjuries: '', medications: 'Typed' }, saved);
+
+    // Whatever step is saved, the health boxes are the server's: Peanuts stays, nothing stays nothing.
+    for (const step of ['about', 'goal', 'life', 'health', 'start'] as const) {
+      const sent = withSavedHealth(mergeSteps(saved, emptied, [step]), saved, profile);
+      const request = toUpdateRequest(sent, profile.version);
+      expect(request.allergies).toBe('Peanuts');
+      expect(request.medications).toBeNull();
+      expect(request.previousInjuries).toBe('Left knee, 2023');
+    }
+    // While open, the health step sends what was typed, as before.
+    const open = finishedProfile();
+    const sentOpen = withSavedHealth(mergeSteps(saved, emptied, ['health']), saved, open);
+    expect(toUpdateRequest(sentOpen, 9)).toMatchObject({
+      allergies: null,
+      medications: 'Typed',
+      previousInjuries: null,
+    });
+  });
+
+  it('knows the server’s refusal by its code alone', () => {
+    const refusal = (body: unknown, status = 409) => new HttpErrorResponse({ status, error: body });
+
+    expect(
+      isHealthStepClosed(
+        refusal({
+          code: 'health_step_closed',
+          message: "Health answers open on Max, TB Gym's coaching.",
+        }),
+      ),
+    ).toBe(true);
+    expect(isHealthStepClosed(refusal({ code: 'concurrency_conflict' }))).toBe(false);
+    expect(isHealthStepClosed(refusal({ title: 'health_step_closed' }))).toBe(false);
+    expect(isHealthStepClosed(refusal(null, 500))).toBe(false);
+    expect(isHealthStepClosed(new Error('health_step_closed'))).toBe(false);
+  });
+
+  it('says why in the app’s own words, to the person and to their coach', () => {
+    expect(healthClosedRefusal({ kind: 'self' })).toBe(
+      'Health answers open on Max, TB Gym’s coaching. Your other answers can still be saved.',
+    );
+    expect(healthClosedRefusal({ kind: 'client', name: 'Rana' })).toBe(
+      'Health answers open on Max, TB Gym’s coaching. Rana’s other answers can still be saved.',
+    );
+    expect(healthClosedNote()).toBe(
+      'Health answers open on Max, TB Gym’s coaching, so these can’t be changed now.',
+    );
   });
 });
 

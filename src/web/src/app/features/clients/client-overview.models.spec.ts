@@ -253,6 +253,14 @@ describe('the renewal prompt, while the server flags the plan ending soon', () =
     expect(renewalPrompt([enrollment()], TODAY, flag('2026-12-01'))).toBeNull();
   });
 
+  it('is never offered for Max, which is booked from the trainee’s ask alone (N9c5b)', () => {
+    const max = enrollment({ lastActiveDate: '2026-10-03', houseTier: 'Max' });
+    expect(renewalPrompt([max], TODAY, flag('2026-10-03'))).toBeNull();
+    expect(
+      renewalPrompt([{ ...max, houseTier: 'ProPlus' }], TODAY, flag('2026-10-03'))?.daysLeft,
+    ).toBe(13);
+  });
+
   it('is not offered for a plan that is not active or is already followed by another', () => {
     const soon = flag('2026-09-30');
     expect(renewalPrompt([enrollment({ effectiveStatus: 'Paused' })], TODAY, soon)).toBeNull();

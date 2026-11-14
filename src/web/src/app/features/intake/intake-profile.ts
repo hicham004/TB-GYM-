@@ -1,8 +1,13 @@
+import { DOCUMENT } from '@angular/common';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  ElementRef,
   inject,
+  Injector,
   input,
   LOCALE_ID,
   signal,
@@ -18,7 +23,9 @@ import { IntakeEdit } from './intake-edit';
 import {
   answerRows,
   groupTitle,
-  INTAKE_GROUPS,
+  healthClosedNote,
+  healthOpen,
+  intakeGroups,
   listWords,
   missingForSetup,
   setupItemLabel,
@@ -44,6 +51,10 @@ import {
 })
 export class IntakeProfile extends GuardedSheets {
   private readonly locale = inject(LOCALE_ID);
+  private readonly document = inject(DOCUMENT);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly editSheet = viewChild.required<TemplateRef<unknown>>('editSheet');
   private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('confirmDialog');
 
@@ -59,7 +70,13 @@ export class IntakeProfile extends GuardedSheets {
   /** The coaching space's name, for the health sheet's line on who sees the answers (CLIENT-18). */
   readonly spaceName = input('');
 
-  protected readonly groups = INTAKE_GROUPS;
+  /**
+   * The cards. While the profile's Health step is closed (a trainee of TB Gym's own space off Max, N9c5a),
+   * its card is left out with nothing saved, and read with no Edit when answers are.
+   */
+  protected readonly groups = computed(() => intakeGroups(this.profile()));
+  protected readonly healthOpen = computed(() => healthOpen(this.profile()));
+  protected readonly closedNote = healthClosedNote();
   protected readonly notAdded = $localize`Not added`;
   protected readonly editing = signal<IntakeStepId>('about');
 
@@ -100,7 +117,28 @@ export class IntakeProfile extends GuardedSheets {
 
   protected edit(step: IntakeStepId): void {
     this.editing.set(step);
-    this.show(this.editSheet(), this.titleOf(step));
+    this.show(this.editSheet(), this.titleOf(step)).closed.subscribe(() => this.keepFocus(step));
+  }
+
+  /**
+   * A closed sheet gives focus back to the Edit that opened it. A Health step closing while its sheet was
+   * open (N9c5a) takes that Edit away, or the whole card when nothing is saved, and focus would fall to the
+   * page's body: it goes to the card's heading then, or to the first card's when that card is gone.
+   */
+  private keepFocus(step: IntakeStepId): void {
+    if (this.destroyRef.destroyed) return;
+    afterNextRender(
+      () => {
+        const active = this.document.activeElement;
+        if (active && active !== this.document.body && active.isConnected) return;
+        const host = this.host.nativeElement;
+        const heading =
+          host.querySelector<HTMLElement>(`#intake-${step}`) ??
+          host.querySelector<HTMLElement>('.panel-head h2');
+        heading?.focus({ preventScroll: true });
+      },
+      { injector: this.injector },
+    );
   }
 
   /** The sheet's own buttons: Save changes closes it for good, Not now asks first when needed. */

@@ -268,6 +268,9 @@ export function serviceWriteError(error: unknown, fallback: string, name: string
     case 'client_blocked':
     case 'client_inactive':
     case 'house_plan_ask_ended': // A house trainee's ask booked or closed meanwhile (SUB-020).
+    case 'house_max_full': // Max's places (N9c5a): every one taken,
+    case 'house_max_closed': // none in TB Gym's settings,
+    case 'house_max_by_ask': // or Max started or renewed outside the trainee's ask.
       return text ?? fallback;
   }
   const said = (text ?? '').toLowerCase();

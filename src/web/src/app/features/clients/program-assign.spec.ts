@@ -829,6 +829,54 @@ describe('Assign program', () => {
     expect(host.querySelector('button[type="submit"]')).toBeNull();
   });
 
+  describe('a trainee of the house (N9c5a)', () => {
+    const free = plan({
+      id: 'enrollment-free',
+      productName: 'Free',
+      offerLabel: 'Free',
+      startDate: '2026-09-14',
+      endDateExclusive: '2027-09-14',
+      lastActiveDate: '2027-09-13',
+      houseTier: 'Free',
+    });
+    const max = plan({
+      id: 'enrollment-max',
+      productName: 'Max coaching',
+      offerLabel: '18 weeks',
+      startDate: '2026-10-01',
+      endDateExclusive: '2027-02-04',
+      lastActiveDate: '2027-02-03',
+      houseTier: 'Max',
+    });
+
+    it('assigns under Max, never Free, so Max is the plan chosen', async () => {
+      const { fixture, host, api } = await render({ enrollments: [free, max] });
+
+      // One plan left to choose: it is told, not asked.
+      expect(host.querySelectorAll('app-select')).toHaveLength(1);
+      expect(textOf(host.querySelector('.plan-line span:last-child'))).toBe(
+        'Max coaching · 18 weeks · 1 Oct – 3 Feb 2027',
+      );
+      await chooseOption(fixture, host, 'Program', 'Hypertrophy · 8 weeks');
+      press(host, 'Assign program');
+      await settle(fixture);
+      expect(api.assignClientMesocycle).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({ enrollmentId: 'enrollment-max' }),
+      );
+    });
+
+    it('says Free alone covers the trainee’s own workouts and no program, with nothing to assign', async () => {
+      const { host } = await render({ enrollments: [free] });
+
+      expect(textOf(host.querySelector('.notice'))).toBe(
+        'Maya is on Free alone, which covers their own workouts and no program. Assign one once a plan with training is booked on Service & access.',
+      );
+      expect(textOf(host)).not.toContain('has no plan that includes training');
+      expect(host.querySelector('button[type="submit"]')).toBeNull();
+    });
+  });
+
   it('points to the program builder when no program is published yet', async () => {
     const { host } = await render({
       api: { listProgramTemplates: vi.fn(() => of({ total: 0, items: [] })) },

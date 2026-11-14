@@ -1,4 +1,5 @@
 import { formatDate } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import type {
   BodyweightUnit,
   ClientIntakeProfile,
@@ -33,6 +34,49 @@ export type IntakeStepId = IntakeGroup | 'start';
 
 export const INTAKE_GROUPS: readonly IntakeGroup[] = ['about', 'goal', 'life', 'health'];
 export const INTAKE_STEPS: readonly IntakeStepId[] = [...INTAKE_GROUPS, 'start'];
+
+/**
+ * Whether the profile's Health step is open (CLI-028, N9c5a): closed only for a trainee of TB Gym's own
+ * space who is not on Max. A read without the field (an older answer or a test double) reads as open.
+ */
+export function healthOpen(profile: ClientIntakeProfile): boolean {
+  return profile.healthStepOpen !== false;
+}
+
+/** The first run's steps: all five, or four without Health while the step is closed. */
+export function intakeSteps(open: boolean): readonly IntakeStepId[] {
+  return open ? INTAKE_STEPS : INTAKE_STEPS.filter((step) => step !== 'health');
+}
+
+/**
+ * The cards of a finished profile. A closed Health step keeps its card only when answers are saved, so
+ * they stay readable (read-only); with nothing saved there is nothing to show.
+ */
+export function intakeGroups(profile: ClientIntakeProfile): readonly IntakeGroup[] {
+  return healthOpen(profile) || isStepDone('health', profile)
+    ? INTAKE_GROUPS
+    : INTAKE_GROUPS.filter((group) => group !== 'health');
+}
+
+/**
+ * What a save sends while the Health step is closed: the saved health answers, as the server holds them,
+ * whatever the boxes hold. Never emptied: an emptied answer passes the server's check and erases it.
+ */
+export function withSavedHealth(
+  sent: IntakeValues,
+  saved: IntakeValues,
+  profile: ClientIntakeProfile,
+): IntakeValues {
+  return healthOpen(profile) ? sent : mergeSteps(sent, saved, ['health']);
+}
+
+/** The server's refusal of a health answer while the step is closed (409 `health_step_closed`). */
+export function isHealthStepClosed(error: unknown): boolean {
+  return (
+    error instanceof HttpErrorResponse &&
+    (error.error as { code?: unknown } | null)?.code === 'health_step_closed'
+  );
+}
 
 /** Every answer a person can type, as the boxes hold them. */
 export interface IntakeValues {
@@ -234,6 +278,23 @@ export function healthPrivacy(): string {
   return $localize`Only you and your coach can see these answers.`;
 }
 
+/**
+ * Why a health answer was not saved while the step is closed (N9c5a, CLI-028): the step opens on Max,
+ * and every other answer still saves. The client reads it of themselves, the staff of the client.
+ */
+export function healthClosedRefusal(subject: IntakeSubject): string {
+  if (subject.kind === 'self') {
+    return $localize`Health answers open on Max, TB Gym’s coaching. Your other answers can still be saved.`;
+  }
+  const name = subject.name;
+  return $localize`Health answers open on Max, TB Gym’s coaching. ${name}:name:’s other answers can still be saved.`;
+}
+
+/** The line on a closed Health card that still shows saved answers: read, not changed. */
+export function healthClosedNote(): string {
+  return $localize`Health answers open on Max, TB Gym’s coaching, so these can’t be changed now.`;
+}
+
 /** The short name a step has in the progress list. */
 export function stepName(step: IntakeStepId): string {
   switch (step) {
@@ -308,9 +369,31 @@ export function isStepDone(step: IntakeStepId, profile: ClientIntakeProfile): bo
   }
 }
 
-/** Where a person who left half way picks up: the first step the saved profile does not finish. */
-export function firstOpenStep(profile: ClientIntakeProfile): IntakeStepId {
-  return INTAKE_STEPS.find((step) => !isStepDone(step, profile)) ?? 'start';
+/**
+ * Where a person who left half way picks up: the first step the saved profile does not finish, among
+ * the steps they have (a closed Health step is never one).
+ */
+export function firstOpenStep(
+  profile: ClientIntakeProfile,
+  steps: readonly IntakeStepId[] = intakeSteps(healthOpen(profile)),
+): IntakeStepId {
+  return steps.find((step) => !isStepDone(step, profile)) ?? 'start';
+}
+
+/** The step that follows `step` among `steps`, or null after the last one. */
+export function stepAfter(step: IntakeStepId, steps: readonly IntakeStepId[]): IntakeStepId | null {
+  return (
+    INTAKE_STEPS.slice(INTAKE_STEPS.indexOf(step) + 1).find((next) => steps.includes(next)) ?? null
+  );
+}
+
+/**
+ * The step to show: the one chosen while it is still one of `steps`; when it has gone (a Health step
+ * closed under the person), the next one that is there, never a step that is not drawn.
+ */
+export function stepShown(chosen: IntakeStepId, steps: readonly IntakeStepId[]): IntakeStepId {
+  if (steps.includes(chosen)) return chosen;
+  return stepAfter(chosen, steps) ?? steps[steps.length - 1];
 }
 
 // ---------- checking ----------
