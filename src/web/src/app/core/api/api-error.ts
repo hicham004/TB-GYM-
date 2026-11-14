@@ -90,6 +90,9 @@ function knownCodeMessage(code: string, error: HttpErrorResponse): string | null
       return $localize`This program has ended, so its sessions can no longer be done.`;
     case 'session_not_due':
       return $localize`This session isn’t due yet. It opens on its day.`;
+    // A program of TB Gym's own space whose Pro+ plan stopped granting (notes plan N9c3).
+    case 'program_plan_closed':
+      return $localize`This program came with a plan that isn’t running now, so its sessions are closed. What you logged stays yours.`;
     default:
       return null;
   }

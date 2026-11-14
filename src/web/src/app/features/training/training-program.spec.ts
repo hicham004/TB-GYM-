@@ -6,7 +6,11 @@ import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
-import type { OwnWorkoutView } from '../../core/api/generated';
+import type {
+  ClientProgramSessionView,
+  ClientTrainingUpcomingView,
+  OwnWorkoutView,
+} from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, press, settle } from '../../../testing/dom';
@@ -19,11 +23,33 @@ import {
   historyItem,
   historyPage,
   nextProgramView,
+  PROGRAM_TODAY,
+  programSession,
   programView,
 } from '../../../testing/training-program-fixtures';
 import { ShareCardMaker } from '../share-cards/share-card-maker';
 import { OwnWorkoutApi } from './own-workout-api';
 import { TrainingProgram } from './training-program';
+
+/** Upcoming training as the server reads it: a trainee's open program counts while its plan grants. */
+function upcomingView(
+  overrides: Partial<ClientTrainingUpcomingView> = {},
+): ClientTrainingUpcomingView {
+  return {
+    isAllowed: true,
+    accessReason: 'Granted',
+    localDate: PROGRAM_TODAY,
+    timeZoneId: 'Asia/Beirut',
+    hasAssignedProgram: true,
+    hasVisibleSessions: true,
+    searchThrough: '2026-12-29',
+    nextSession: null,
+    unfinishedWorkouts: [],
+    nextSkip: null,
+    todayCoverage: null,
+    ...overrides,
+  };
+}
 
 async function render(
   api: Partial<Record<keyof ApiClient, unknown>> = {},
@@ -36,6 +62,10 @@ async function render(
   const client = {
     getMyTrainingProgram: vi.fn(() => of(programView())),
     getMyWorkoutHistory: vi.fn(() => of(historyPage())),
+    // Training asks who reads it whenever it is open (notes plan N9c4): a coach's client unless told.
+    getSelfProfile: vi.fn(() => of(finishedProfile())),
+    // A trainee's running program of TB Gym's is still under its plan unless told (TRN-034).
+    getMyUpcomingTraining: vi.fn(() => of(upcomingView())),
     ...api,
   };
   const ownApi = {
@@ -712,6 +742,7 @@ describe('TrainingProgram', () => {
       expect(Array.from(actions.children).map((action) => textOf(action))).toEqual([
         'Start a workout',
         'Browse exercises',
+        'TB Gym’s programs',
       ]);
       expect(getComputedStyle(actions).display).toBe('flex');
       expect(getComputedStyle(actions).flexWrap).toBe('wrap');
@@ -954,7 +985,7 @@ describe('TrainingProgram', () => {
       expect(meta.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
     });
 
-    it('offers nothing of the kind beside a program, and never asks who reads the page', async () => {
+    it('offers no workout of their own beside a program, which leads while it runs (notes plan N9c4)', async () => {
       const getSelfProfile = trainee();
       const { host } = await render({ getSelfProfile });
 
@@ -962,7 +993,9 @@ describe('TrainingProgram', () => {
       expect(host.querySelectorAll('.history-item')).toHaveLength(2);
       expect(host.querySelector('[data-start-own]')).toBeNull();
       expect(host.querySelector('[data-start-from]')).toBeNull();
-      expect(getSelfProfile).not.toHaveBeenCalled();
+      // Asked once all the same, so the trainee finds TB Gym's programs beside the program.
+      expect(getSelfProfile).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('a[data-house-programs]')).not.toBeNull();
     });
 
     it('says only No workouts yet when the profile cannot be read, with nothing to start', async () => {
@@ -1002,6 +1035,477 @@ describe('TrainingProgram', () => {
       expect(read()).toContain('Nothing assigned yet');
       expect(host.querySelector('[data-start-own]')).toBeNull();
       expect(host.querySelector('[data-start-from]')).toBeNull();
+    });
+  });
+
+  describe('a trainee’s program of TB Gym’s (notes plan N9c4)', () => {
+    const trainee = () => vi.fn(() => of(finishedProfile({ selfDirected: true })));
+    const navigation = () => vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const closedWords =
+      'This program came with a plan that isn’t running now, so its sessions are closed. What you logged stays yours.';
+    /** This week with a later session the trainee may start before its day, and one the server keeps to its day. */
+    const early = (overrides: Partial<ClientProgramSessionView> = {}) => {
+      const view = programView();
+      const week = view.program!.weeks[2];
+      view.program!.weeks[2] = {
+        ...week,
+        sessions: [
+          ...week.sessions,
+          {
+            ...programSession('s7', 'Upper B', '2026-10-02', 'Upcoming'),
+            canStartEarly: true,
+            ...overrides,
+          },
+          programSession('s8', 'Lower B', '2026-10-03', 'Upcoming'),
+        ],
+      };
+      return view;
+    };
+    const housePrograms = (host: HTMLElement) =>
+      host.querySelectorAll<HTMLAnchorElement>('a[data-house-programs]');
+
+    it('links a trainee to TB Gym’s programs at the program’s foot, outlined, and a coach’s client never', async () => {
+      const getSelfProfile = trainee();
+      const { host, textOf } = await render({ getSelfProfile });
+
+      const links = housePrograms(host);
+      expect(links).toHaveLength(1);
+      expect(textOf(links[0])).toBe('TB Gym’s programs');
+      expect(links[0].getAttribute('href')).toBe('/training/house-programs');
+      expect(links[0].classList).toContain('tb-button--outlined');
+      expect(textOf(links[0].closest('.house-next')?.querySelector('p'))).toBe('See what’s next');
+      // After the program's weeks, before the finished workouts.
+      const history = host.querySelector('section[aria-labelledby="history-heading"]')!;
+      expect(
+        links[0].compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(getSelfProfile).toHaveBeenCalledTimes(1);
+      TestBed.resetTestingModule();
+
+      const coached = await render();
+      expect(coached.host.querySelector('.hero')).not.toBeNull();
+      expect(housePrograms(coached.host)).toHaveLength(0);
+      TestBed.resetTestingModule();
+
+      const unknown = await render({
+        getSelfProfile: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 503 }))),
+      });
+      expect(housePrograms(unknown.host)).toHaveLength(0);
+    });
+
+    it('links a trainee with no program to TB Gym’s programs beside their own workouts, once', async () => {
+      const { host } = await render({
+        getMyTrainingProgram: vi.fn(() => of(programView({ program: null }))),
+        getSelfProfile: trainee(),
+      });
+
+      const links = housePrograms(host);
+      expect(links).toHaveLength(1);
+      expect(links[0].closest('.own-actions')).not.toBeNull();
+      expect(links[0].getAttribute('href')).toBe('/training/house-programs');
+      expect(host.querySelector('.house-next')).toBeNull();
+    });
+
+    it('starts a later session of this week at once and opens the player on it', async () => {
+      const startMyWorkout = vi.fn(() => of({ id: 'w-s7' }));
+      const { host, settle, textOf, spoken } = await render({
+        getMyTrainingProgram: vi.fn(() => of(early())),
+        getSelfProfile: trainee(),
+        startMyWorkout,
+      });
+      const navigate = navigation();
+      const refresh = vi.mocked(TestBed.inject(CsrfService).refresh);
+      refresh.mockClear();
+
+      const week = host.querySelector('section[aria-labelledby="focus-heading"]')!;
+      const sessions = [...week.querySelectorAll('.session')];
+      const startNow = sessions[2].querySelector<HTMLButtonElement>('button[data-start-early]')!;
+      expect(textOf(startNow)).toBe('Start now, Upper B');
+      expect(textOf(startNow.querySelector('.tb-visually-hidden'))).toBe(', Upper B');
+      expect(startNow.classList).toContain('tb-button--outlined');
+      // Only the session the server allows: the other later one offers nothing.
+      expect(host.querySelectorAll('button[data-start-early]')).toHaveLength(1);
+      expect(sessions[3].querySelector('button')).toBeNull();
+      expect(spoken(sessions[3])).toBe('Sat 3 Oct, Lower B, 4 exercises · 12 sets');
+
+      press(host, 'Start now, Upper B');
+      await settle();
+      await settle();
+
+      // Nothing is asked first: it counts on its own day, never late.
+      expect(dialog()).toBeNull();
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(startMyWorkout).toHaveBeenCalledExactlyOnceWith('s7');
+      expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
+        startMyWorkout.mock.invocationCallOrder[0],
+      );
+      expect(navigate).toHaveBeenCalledExactlyOnceWith(['/training/today'], {
+        queryParams: { sessionId: 's7' },
+      });
+    });
+
+    it('starts one session at a time, the other buttons waiting', async () => {
+      const answer = new Subject<{ id: string }>();
+      const view = programView();
+      view.program!.weeks[2] = {
+        ...view.program!.weeks[2],
+        sessions: [
+          { ...programSession('s7', 'Upper B', '2026-10-02', 'Upcoming'), canStartEarly: true },
+          { ...programSession('s8', 'Lower B', '2026-10-03', 'Upcoming'), canStartEarly: true },
+        ],
+      };
+      const startMyWorkout = vi.fn(() => answer);
+      const { host, settle } = await render({
+        getMyTrainingProgram: vi.fn(() => of(view)),
+        getSelfProfile: trainee(),
+        startMyWorkout,
+      });
+      navigation();
+
+      press(host, 'Start now, Upper B');
+      await settle();
+
+      expect(button(host, 'Start now, Lower B').disabled).toBe(true);
+      expect(button(host, 'Start now, Upper B').classList).toContain('tb-button--loading');
+      button(host, 'Start now, Upper B').click();
+      await settle();
+      expect(startMyWorkout).toHaveBeenCalledExactlyOnceWith('s7');
+      answer.next({ id: 'w-s7' });
+      answer.complete();
+      await settle();
+    });
+
+    it('says under the session why it could not start early', async () => {
+      const refused = new HttpErrorResponse({
+        status: 409,
+        error: { code: 'program_plan_closed', message: 'Server wording' },
+      });
+      const { host, settle, textOf } = await render({
+        getMyTrainingProgram: vi.fn(() => of(early())),
+        getSelfProfile: trainee(),
+        startMyWorkout: vi.fn(() => throwError(() => refused)),
+      });
+      const navigate = navigation();
+
+      press(host, 'Start now, Upper B');
+      await settle();
+      await settle();
+
+      const session = host.querySelectorAll('section[aria-labelledby="focus-heading"] .session')[2];
+      const problem = session.querySelector('.do-now-problem');
+      expect(problem?.getAttribute('role')).toBe('alert');
+      expect(textOf(problem)).toBe(closedWords);
+      expect(host.querySelectorAll('.do-now-problem')).toHaveLength(1);
+      expect(navigate).not.toHaveBeenCalled();
+      expect(button(host, 'Start now, Upper B').disabled).toBe(false);
+    });
+
+    it('keeps focus on the Start now pressed while its start is on its way, and after a refusal', async () => {
+      const answer = new Subject<{ id: string }>();
+      const { host, settle, textOf } = await render({
+        getMyTrainingProgram: vi.fn(() => of(early())),
+        getSelfProfile: trainee(),
+        startMyWorkout: vi.fn(() => answer),
+      });
+      const navigate = navigation();
+      const startNow = () => button(host, 'Start now, Upper B');
+
+      startNow().focus();
+      startNow().click();
+      await settle();
+
+      // Busy, not disabled: a disabled button would drop focus to the page.
+      expect(startNow().disabled).toBe(false);
+      expect(startNow().getAttribute('aria-disabled')).toBe('true');
+      expect(startNow().classList).toContain('tb-button--loading');
+      expect(document.activeElement).toBe(startNow());
+
+      answer.error(
+        new HttpErrorResponse({
+          status: 409,
+          error: { code: 'program_plan_closed', message: 'Server wording' },
+        }),
+      );
+      await settle();
+      await settle();
+
+      expect(document.activeElement).toBe(startNow());
+      expect(startNow().getAttribute('aria-disabled')).toBeNull();
+      const session = host.querySelectorAll('section[aria-labelledby="focus-heading"] .session')[2];
+      expect(session.contains(startNow())).toBe(true);
+      expect(textOf(session.querySelector('[role="alert"]'))).toBe(closedWords);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('asks a trainee before doing a missed session now without a coach in the words, the pressed button kept focusable', async () => {
+      const answer = new Subject<{ id: string }>();
+      const startMyWorkout = vi.fn(() => answer);
+      const { host, settle, textOf } = await render({
+        getSelfProfile: trainee(),
+        startMyWorkout,
+      });
+      const navigate = navigation();
+
+      host.querySelector<HTMLButtonElement>('#week-row-2 .week-row')!.click();
+      await settle();
+      const doNow = () => host.querySelector<HTMLButtonElement>('#week-2 button.do-now')!;
+      doNow().click();
+      await settle();
+
+      expect(textOf(dialog())).toContain(
+        'It was planned for Thu 24 Sep. Done now, it counts as done late.',
+      );
+      expect(textOf(dialog())).not.toContain('coach');
+      press(dialog()!, 'Start workout');
+      await settle();
+      await settle();
+
+      expect(startMyWorkout).toHaveBeenCalledExactlyOnceWith('s4');
+      expect(doNow().disabled).toBe(false);
+      expect(doNow().getAttribute('aria-disabled')).toBe('true');
+      answer.next({ id: 'w-s4' });
+      answer.complete();
+      await settle();
+      expect(navigate).toHaveBeenCalledExactlyOnceWith(['/training/today'], {
+        queryParams: { sessionId: 's4' },
+      });
+    });
+
+    it('keeps the coach in Do it now’s words when the profile cannot say who reads', async () => {
+      const { host, settle, textOf } = await render({
+        getSelfProfile: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 503 }))),
+      });
+
+      host.querySelector<HTMLButtonElement>('#week-row-2 .week-row')!.click();
+      await settle();
+      host.querySelector<HTMLButtonElement>('#week-2 button.do-now')!.click();
+      await settle();
+
+      expect(textOf(dialog())).toContain(
+        'It was planned for Thu 24 Sep. Done now, it counts as done late, and your coach sees that.',
+      );
+      press(dialog()!, 'Not now');
+      await settle();
+    });
+
+    it('says a program whose plan stopped has its sessions closed, and offers nothing new to start', async () => {
+      const view = early();
+      // Week 1 holds a workout left open, which may still be finished.
+      view.program!.weeks[0] = {
+        ...view.program!.weeks[0],
+        sessions: [
+          view.program!.weeks[0].sessions[0],
+          {
+            ...programSession('s2', 'Upper A', '2026-09-17', 'InProgress'),
+            startedOn: '2026-09-17',
+          },
+        ],
+      };
+      const getMyUpcomingTraining = vi.fn(() => of(upcomingView({ hasAssignedProgram: false })));
+      const { host, settle, textOf } = await render({
+        getMyTrainingProgram: vi.fn(() => of(view)),
+        getSelfProfile: trainee(),
+        getMyUpcomingTraining,
+      });
+
+      expect(getMyUpcomingTraining).toHaveBeenCalledTimes(1);
+      const hero = host.querySelector('.hero')!;
+      expect(textOf(hero.querySelector('[data-plan-closed]'))).toBe(closedWords);
+      expect(hero.querySelector('[data-plan-closed]')?.classList).toContain('hero-problem');
+      expect(hero.querySelector('a, button')).toBeNull();
+      expect(hero.querySelector('.hero-today')).toBeNull();
+      // Today's session is no link to the player, and the later one offers no early start.
+      const week = host.querySelector('section[aria-labelledby="focus-heading"]')!;
+      expect([...week.querySelectorAll('.session')].map((session) => session.tagName)).toEqual([
+        'DIV',
+        'DIV',
+        'DIV',
+        'DIV',
+      ]);
+      expect(host.querySelector('button[data-start-early]')).toBeNull();
+      // The missed one offers no Do it now, and the one left open is no link either: the player's reads
+      // no longer list a closed program's workout, so it would open on nothing.
+      host.querySelector<HTMLButtonElement>('#week-row-2 .week-row')!.click();
+      host.querySelector<HTMLButtonElement>('#week-row-1 .week-row')!.click();
+      await settle();
+      expect(host.querySelector('button.do-now')).toBeNull();
+      expect(host.querySelector('a.session')).toBeNull();
+      const open = host.querySelector('#week-1 .session.is-InProgress')!;
+      expect(open.tagName).toBe('DIV');
+      expect(textOf(open.querySelector('.session-tag'))).toBe('In progress');
+      expect(host.querySelector('a[href^="/training/today?sessionId="]')).toBeNull();
+      // TB Gym's programs stay in reach.
+      expect(housePrograms(host)).toHaveLength(1);
+    });
+
+    describe('workouts of their own whenever no program runs (TRN-033)', () => {
+      const finishedView = () => {
+        const view = programView();
+        view.program!.phase = 'Finished';
+        view.program!.currentWeekNumber = null;
+        return view;
+      };
+      const foot = (host: HTMLElement) => host.querySelector<HTMLElement>('.house-next');
+
+      it('offers Start a workout, Browse exercises and each finished workout beside a finished program', async () => {
+        const { host, ownApi, settle, textOf } = await render({
+          getMyTrainingProgram: vi.fn(() => of(finishedView())),
+          getSelfProfile: trainee(),
+        });
+        const navigate = navigation();
+
+        expect(textOf(host.querySelector('.hero-eyebrow'))).toBe('Program finished');
+        const actions = foot(host)!;
+        expect(Array.from(actions.children).map((action) => textOf(action))).toEqual([
+          'Start a workout',
+          'Browse exercises',
+          'TB Gym’s programs',
+        ]);
+        const start = actions.querySelector<HTMLButtonElement>('button[data-start-own]')!;
+        expect(start.classList).toContain('tb-button--filled');
+        expect(actions.querySelector('a[data-browse-pool]')?.getAttribute('href')).toBe(
+          '/training/pool',
+        );
+        expect(actions.querySelector('a[data-browse-pool]')?.classList).toContain(
+          'tb-button--outlined',
+        );
+        expect(host.querySelectorAll('button[data-start-own]')).toHaveLength(1);
+        expect(host.querySelectorAll('.history-item button[data-start-from]')).toHaveLength(2);
+
+        press(host, 'Start a workout');
+        await settle();
+
+        expect(ownApi.start).toHaveBeenCalledExactlyOnceWith(null);
+        expect(navigate).toHaveBeenCalledExactlyOnceWith(['/training/today'], {
+          queryParams: { sessionId: 'own-new' },
+        });
+      });
+
+      it('offers them beside a program whose plan stopped, and says under them why one could not start', async () => {
+        const { host, settle, textOf } = await render(
+          {
+            getMyTrainingProgram: vi.fn(() => of(early())),
+            getSelfProfile: trainee(),
+            getMyUpcomingTraining: vi.fn(() => of(upcomingView({ hasAssignedProgram: false }))),
+          },
+          fakeClientAccess(),
+          '/',
+          {
+            start: vi.fn(() =>
+              throwError(
+                () =>
+                  new HttpErrorResponse({
+                    status: 409,
+                    error: {
+                      code: 'own_workout_in_progress',
+                      message:
+                        'You have a workout you have not finished. Carry on with it, or finish it first.',
+                    },
+                  }),
+              ),
+            ),
+          },
+        );
+        const navigate = navigation();
+
+        expect(host.querySelector('[data-plan-closed]')).not.toBeNull();
+        expect(foot(host)?.querySelector('button[data-start-own]')).not.toBeNull();
+        expect(foot(host)?.querySelector('a[data-browse-pool]')).not.toBeNull();
+        expect(host.querySelectorAll('.history-item button[data-start-from]')).toHaveLength(2);
+
+        press(host, 'Start a workout');
+        await settle();
+
+        const problem = host.querySelector('.house-next + .own-problem');
+        expect(textOf(problem?.querySelector('[role="alert"]'))).toBe(
+          'You have a workout you haven’t finished. Carry on with it, or finish it first.',
+        );
+        expect(problem?.querySelector('a')?.getAttribute('href')).toBe('/training/today');
+        expect(host.querySelectorAll('.own-problem')).toHaveLength(1);
+        expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it('offers none beside a running program, nor to a coach’s client whose program finished', async () => {
+        const running = await render({
+          getMyTrainingProgram: vi.fn(() => of(early())),
+          getSelfProfile: trainee(),
+        });
+        expect(running.host.querySelector('[data-start-own], [data-browse-pool]')).toBeNull();
+        expect(running.host.querySelector('[data-start-from]')).toBeNull();
+        expect(running.textOf(foot(running.host)?.querySelector('p'))).toBe('See what’s next');
+        TestBed.resetTestingModule();
+
+        const coached = await render({
+          getMyTrainingProgram: vi.fn(() => of(finishedView())),
+        });
+        expect(coached.host.querySelector('.hero')).not.toBeNull();
+        expect(coached.host.querySelector('[data-start-own], [data-browse-pool]')).toBeNull();
+        expect(coached.host.querySelector('[data-start-from]')).toBeNull();
+        expect(foot(coached.host)).toBeNull();
+      });
+    });
+
+    it('asks about the plan only for a trainee’s running program, and offers what it would when it cannot', async () => {
+      const coached = await render({ getMyTrainingProgram: vi.fn(() => of(early())) });
+      expect(coached.client.getMyUpcomingTraining).not.toHaveBeenCalled();
+      expect(coached.host.querySelector('[data-plan-closed]')).toBeNull();
+      TestBed.resetTestingModule();
+
+      const finished = programView();
+      finished.program!.phase = 'Finished';
+      finished.program!.currentWeekNumber = null;
+      const done = await render({
+        getMyTrainingProgram: vi.fn(() => of(finished)),
+        getSelfProfile: trainee(),
+      });
+      expect(done.client.getMyUpcomingTraining).not.toHaveBeenCalled();
+      TestBed.resetTestingModule();
+
+      const unread = await render({
+        getMyTrainingProgram: vi.fn(() => of(early())),
+        getSelfProfile: trainee(),
+        getMyUpcomingTraining: vi.fn(() =>
+          throwError(() => new HttpErrorResponse({ status: 503 })),
+        ),
+      });
+      expect(unread.client.getMyUpcomingTraining).toHaveBeenCalledTimes(1);
+      expect(unread.host.querySelector('[data-plan-closed]')).toBeNull();
+      expect(unread.host.querySelector('a.hero-action')?.getAttribute('href')).toBe(
+        '/training/today?sessionId=s6',
+      );
+      expect(unread.host.querySelector('button[data-start-early]')).not.toBeNull();
+    });
+
+    it('dates a workout started early or late by the day it was started', async () => {
+      const started = (startedOn: string) => {
+        const view = programView();
+        view.program!.weeks[2] = {
+          ...view.program!.weeks[2],
+          sessions: [
+            view.program!.weeks[2].sessions[0],
+            { ...programSession('s7', 'Upper B', '2026-10-02', 'InProgress'), startedOn },
+          ],
+        };
+        return view;
+      };
+
+      const yesterday = await render({
+        getMyTrainingProgram: vi.fn(() => of(started('2026-09-29'))),
+        getSelfProfile: trainee(),
+      });
+      expect(yesterday.textOf(yesterday.host.querySelector('.hero-today'))).toBe(
+        'Started Tue 29 Sep: Upper B',
+      );
+      expect(yesterday.host.querySelector('a.hero-action')?.getAttribute('href')).toBe(
+        '/training/today?sessionId=s7',
+      );
+      TestBed.resetTestingModule();
+
+      const today = await render({
+        getMyTrainingProgram: vi.fn(() => of(started(PROGRAM_TODAY))),
+        getSelfProfile: trainee(),
+      });
+      expect(today.textOf(today.host.querySelector('.hero-today'))).toBe('In progress: Upper B');
     });
   });
 });

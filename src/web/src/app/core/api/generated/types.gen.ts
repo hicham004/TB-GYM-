@@ -1011,6 +1011,7 @@ export type ClientProgramSessionView = {
   setCount: number | string;
   startedOn?: null | string;
   isLate?: boolean;
+  canStartEarly?: boolean;
 };
 
 export type ClientProgramSummaryResult = {
@@ -2618,6 +2619,99 @@ export type HousePlanTransferView = {
   sentOn: string;
 };
 
+export type HouseProgramListingView = {
+  listingId: string;
+  templateId: string;
+  templateName: string;
+  templateVersionId: null | string;
+  weeks: null | number | string;
+  loadUnit: null | TrainingLoadUnit;
+  mixesUnits: boolean;
+  suits: string;
+  runName: null | string;
+  runPosition: null | number | string;
+  loadIncrement: number | string;
+  loadRoundingMode: TrainingLoadRoundingMode;
+  isOffered: boolean;
+  timesStarted: number | string;
+  version: number | string;
+};
+
+export type HouseProgramMaxSource = 'Typed' | 'LastProgram';
+
+export type HouseProgramMaxView = {
+  exerciseId: string;
+  exerciseName: string;
+  unit: TrainingLoadUnit;
+  value: null | number | string;
+  from: null | HouseProgramMaxSource;
+  on: null | string;
+};
+
+export type HouseProgramPassView = {
+  enrollmentId: string;
+  name: string;
+  startDate: string;
+  endDateExclusive: string;
+};
+
+export type HouseProgramRunningView = {
+  programId: string;
+  name: string;
+  startDate: string;
+  endDateExclusive: string;
+};
+
+export type HouseProgramSampleExerciseView = {
+  exerciseId: string;
+  name: string;
+  isMainLift: boolean;
+  sets: number | string;
+  repetitionsMinimum: null | number | string;
+  repetitionsMaximum: null | number | string;
+};
+
+export type HouseProgramSampleSessionView = {
+  name: string;
+  dayOffset: number | string;
+  exercises: Array<HouseProgramSampleExerciseView>;
+};
+
+export type HouseProgramStartedView = {
+  programId: string;
+  listingId: string;
+  name: string;
+  startDate: string;
+  endDateExclusive: string;
+};
+
+export type HouseProgramsView = {
+  today: string;
+  pass: null | HouseProgramPassView;
+  running: null | HouseProgramRunningView;
+  programs: Array<HouseProgramView>;
+};
+
+export type HouseProgramView = {
+  listingId: string;
+  templateId: string;
+  templateVersionId: string;
+  name: string;
+  description: null | string;
+  suits: string;
+  runName: null | string;
+  runPosition: null | number | string;
+  weeks: number | string;
+  loadUnit: TrainingLoadUnit;
+  sampleWeek: Array<HouseProgramSampleSessionView>;
+  maxes: Array<HouseProgramMaxView>;
+  canStart: boolean;
+  refusal: null | string;
+  opensOn: null | string;
+  lastStartDay: null | string;
+  timesStarted: number | string;
+};
+
 export type HouseSetting =
   | 'SignUpsPerWeek'
   | 'MinimumSignUpAge'
@@ -3370,6 +3464,15 @@ export type OfferFeatureRequest = {
 export type OfferFeatureView = {
   feature: CoachingFeature;
   allowsConcurrentCoverage: boolean;
+};
+
+export type OfferHouseProgramRequest = {
+  suits: null | string;
+  runName?: null | string;
+  runPosition?: null | number | string;
+  loadIncrement?: null | number | string;
+  loadRoundingMode?: null | TrainingLoadRoundingMode;
+  version?: null | number | string;
 };
 
 export type OneRepMaxEstimateView = {
@@ -4210,6 +4313,12 @@ export type RecordNutritionChoiceRequest = {
   dailyLogVersion: null | number | string;
 };
 
+export type RecordOwnMaxRequest = {
+  exerciseId: string;
+  value: number | string;
+  unit: LoadUnit;
+};
+
 export type RecordPlatformPaymentRequest = {
   amount: number | string;
   reference: string;
@@ -4586,6 +4695,11 @@ export type SetWeightRequest = {
   setPrescriptionId: string;
   currentWeight: null | number | string;
   weight: number | string;
+};
+
+export type StartHouseProgramRequest = {
+  templateVersionId: string;
+  idempotencyKey: string;
 };
 
 export type StartingWeightCorrectionView = {
@@ -5057,6 +5171,10 @@ export type WeekProgressionSteps = {
 
 export type WeightUnitRequest = {
   unit: string;
+};
+
+export type WithdrawHouseProgramRequest = {
+  version: number | string;
 };
 
 export type WorkingMaxSelectionRequest = {
@@ -8567,6 +8685,44 @@ export type EstimateMaxFromRpeChartResponses = {
 export type EstimateMaxFromRpeChartResponse =
   EstimateMaxFromRpeChartResponses[keyof EstimateMaxFromRpeChartResponses];
 
+export type RecordMyStrengthMaxData = {
+  body: RecordOwnMaxRequest;
+  path?: never;
+  query?: never;
+  url: '/api/strength/me/maxes';
+};
+
+export type RecordMyStrengthMaxErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RecordMyStrengthMaxError = RecordMyStrengthMaxErrors[keyof RecordMyStrengthMaxErrors];
+
+export type RecordMyStrengthMaxResponses = {
+  /**
+   * OK
+   */
+  200: StrengthMaxView;
+};
+
+export type RecordMyStrengthMaxResponse =
+  RecordMyStrengthMaxResponses[keyof RecordMyStrengthMaxResponses];
+
 export type ListProgramTemplatesData = {
   body?: never;
   path?: never;
@@ -9611,6 +9767,99 @@ export type GetPreviousProgramMaxesResponses = {
 export type GetPreviousProgramMaxesResponse =
   GetPreviousProgramMaxesResponses[keyof GetPreviousProgramMaxesResponses];
 
+export type ListHouseProgramsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/training/house-programs';
+};
+
+export type ListHouseProgramsErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type ListHouseProgramsResponses = {
+  /**
+   * OK
+   */
+  200: Array<HouseProgramListingView>;
+};
+
+export type ListHouseProgramsResponse =
+  ListHouseProgramsResponses[keyof ListHouseProgramsResponses];
+
+export type OfferHouseProgramData = {
+  body: OfferHouseProgramRequest;
+  path: {
+    templateId: string;
+  };
+  query?: never;
+  url: '/api/training/templates/{templateId}/house-listing';
+};
+
+export type OfferHouseProgramErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type OfferHouseProgramError = OfferHouseProgramErrors[keyof OfferHouseProgramErrors];
+
+export type OfferHouseProgramResponses = {
+  /**
+   * OK
+   */
+  200: HouseProgramListingView;
+};
+
+export type OfferHouseProgramResponse =
+  OfferHouseProgramResponses[keyof OfferHouseProgramResponses];
+
+export type WithdrawHouseProgramData = {
+  body: WithdrawHouseProgramRequest;
+  path: {
+    templateId: string;
+  };
+  query?: never;
+  url: '/api/training/templates/{templateId}/house-listing/withdraw';
+};
+
+export type WithdrawHouseProgramErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type WithdrawHouseProgramError =
+  WithdrawHouseProgramErrors[keyof WithdrawHouseProgramErrors];
+
+export type WithdrawHouseProgramResponses = {
+  /**
+   * OK
+   */
+  200: HouseProgramListingView;
+};
+
+export type WithdrawHouseProgramResponse =
+  WithdrawHouseProgramResponses[keyof WithdrawHouseProgramResponses];
+
 export type GetCoachWorkoutDetailData = {
   body?: never;
   path: {
@@ -9639,6 +9888,70 @@ export type GetCoachWorkoutDetailResponses = {
 
 export type GetCoachWorkoutDetailResponse =
   GetCoachWorkoutDetailResponses[keyof GetCoachWorkoutDetailResponses];
+
+export type GetMyHouseProgramsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/training/me/house-programs';
+};
+
+export type GetMyHouseProgramsErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetMyHouseProgramsResponses = {
+  /**
+   * OK
+   */
+  200: HouseProgramsView;
+};
+
+export type GetMyHouseProgramsResponse =
+  GetMyHouseProgramsResponses[keyof GetMyHouseProgramsResponses];
+
+export type StartMyHouseProgramData = {
+  body: StartHouseProgramRequest;
+  path: {
+    listingId: string;
+  };
+  query?: never;
+  url: '/api/training/me/house-programs/{listingId}/start';
+};
+
+export type StartMyHouseProgramErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type StartMyHouseProgramError = StartMyHouseProgramErrors[keyof StartMyHouseProgramErrors];
+
+export type StartMyHouseProgramResponses = {
+  /**
+   * OK
+   */
+  200: HouseProgramStartedView;
+};
+
+export type StartMyHouseProgramResponse =
+  StartMyHouseProgramResponses[keyof StartMyHouseProgramResponses];
 
 export type GetMyUpcomingTrainingData = {
   body?: never;

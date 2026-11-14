@@ -44,6 +44,17 @@ describe('apiErrorMessage', () => {
     ).toBe('This session isn’t due yet. It opens on its day.');
   });
 
+  it('says a program whose plan stopped has its sessions closed, keeping what was logged (N9c4)', () => {
+    expect(
+      apiErrorMessage(
+        conflict({ code: 'program_plan_closed', message: 'Server wording' }),
+        fallback,
+      ),
+    ).toBe(
+      'This program came with a plan that isn’t running now, so its sessions are closed. What you logged stays yours.',
+    );
+  });
+
   it('distinguishes a full client allowance from a full workspace allowance', () => {
     const message = apiErrorMessage(
       conflict({

@@ -26,6 +26,11 @@ export interface ProgramSession {
   readonly isLate: boolean;
   /** A missed session of the program running now, which the client may still do ("Do it now"). */
   readonly canDoNow: boolean;
+  /**
+   * A later session of this week that a trainee of TB Gym's own space may start before its day
+   * ("Start now", TRN-020, notes plan N9c3): the server says so only while the program's plan grants.
+   */
+  readonly canStartEarly: boolean;
 }
 
 export interface ProgramWeek {
@@ -151,6 +156,8 @@ function mapProgram(program: ClientProgramView, today: string): TrainingProgram 
         startedOn: session.startedOn ?? null,
         isLate: session.isLate ?? false,
         canDoNow: session.state === 'Missed' && program.phase === 'Current',
+        // A read from before early starts carries no flag: nothing starts before its day.
+        canStartEarly: session.state === 'Upcoming' && session.canStartEarly === true,
       }));
       return {
         number: Number(week.weekNumber),
@@ -215,7 +222,11 @@ export function mapWorkoutHistory(value: ClientWorkoutHistoryPage): WorkoutHisto
 export function programAction(program: TrainingProgram, today: string): ProgramAction {
   const sessions = program.weeks.flatMap((week) => week.sessions);
   const find = (test: (session: ProgramSession) => boolean) => sessions.find(test);
-  const startedToday = find((session) => session.state === 'InProgress' && session.date === today);
+  // A session started before its day (TRN-020) was started today when its start day is today.
+  const startedToday = find(
+    (session) =>
+      session.state === 'InProgress' && (session.date === today || session.startedOn === today),
+  );
   if (startedToday) return { kind: 'continue', session: startedToday };
   const dueToday = find((session) => session.state === 'Today');
   if (dueToday) return { kind: 'start', session: dueToday };

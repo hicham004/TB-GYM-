@@ -1,0 +1,257 @@
+<div class="house-programs tb-theme">
+  <header class="page-head">
+    <h1 #heading tabindex="-1" i18n>Programs</h1>
+    <p class="lede" i18n>Programs written by TB Gym’s coach. You follow one at a time.</p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>TB Gym’s programs couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" size="touch" (click)="load()" i18n>
+          Try again
+        </button>
+      </div>
+    }
+    @case ('gone') {
+      <!-- Not TB Gym's own space, or no self-directed trainee of it: the programs are theirs alone. -->
+      <app-empty-state
+        class="panel"
+        heading="Programs aren’t open here"
+        i18n-heading
+        description="TB Gym’s programs are for people who train with TB Gym on their own."
+        i18n-description
+        data-programs-gone
+      >
+        <a
+          appButton
+          empty-state-action
+          variant="outlined"
+          size="touch"
+          routerLink="/training/program"
+          i18n
+          >Back to Training</a
+        >
+      </app-empty-state>
+    }
+    @case ('closed') {
+      <app-empty-state
+        class="panel"
+        heading="Programs are closed for now"
+        i18n-heading
+        [description]="closedWords()"
+        data-programs-closed
+      />
+    }
+    @default {
+      @if (read()) {
+        <!-- The pass first: what Start needs, and when it ends. -->
+        <section class="pass panel" aria-label="Your plan" i18n-aria-label data-pass>
+          @if (pass(); as under) {
+            <p class="pass-title" i18n>Pro+ until {{ under.until }}</p>
+            @if (under.running; as running) {
+              @if (running.stranded) {
+                <p data-running-stranded i18n>
+                  <bdi dir="auto">{{ running.name }}</bdi
+                  >’s plan has ended, and a workout you started in it is still open.
+                </p>
+              } @else {
+                <p data-running i18n>
+                  <bdi dir="auto">{{ running.name }}</bdi> runs until {{ running.until }}.
+                </p>
+              }
+              <a class="text-link" routerLink="/training/program" data-open-training i18n
+                >Open Training</a
+              >
+            }
+          } @else {
+            <p class="pass-title" i18n>
+              Starting a program needs Pro+. Free keeps running, with everything you logged.
+            </p>
+            @switch (free().kind) {
+              @case ('asked') {
+                <p data-asked i18n>
+                  You asked for <bdi dir="auto">{{ free().planName }}</bdi
+                  >. My plan shows where it stands.
+                </p>
+                <a class="text-link" routerLink="/plan" data-my-plan i18n>My plan</a>
+              }
+              @case ('ask') {
+                <a
+                  appButton
+                  variant="accent"
+                  size="touch"
+                  routerLink="/plan"
+                  class="ask"
+                  data-ask-pro
+                  i18n
+                  >Ask for Pro+</a
+                >
+              }
+              @case ('off') {
+                <p class="muted" data-asks-off i18n>Pro+ can’t be asked for yet.</p>
+              }
+            }
+          }
+        </section>
+
+        @if (notice(); as said) {
+          <p #notice class="notice" tabindex="-1" data-notice>{{ said }}</p>
+        }
+
+        @if (cards().length === 0) {
+          <app-empty-state
+            class="panel"
+            heading="No programs yet"
+            i18n-heading
+            description="TB Gym hasn’t offered a program yet. Check back soon."
+            i18n-description
+            data-programs-empty
+          />
+        } @else {
+          <ul class="programs" role="list">
+            @for (card of cards(); track card.program.listingId) {
+              <li class="program panel" [attr.data-program]="card.program.listingId">
+                <div class="program-head">
+                  @if (card.block; as block) {
+                    <p class="kicker" dir="auto">{{ block }}</p>
+                  }
+                  <h2 class="name">
+                    <bdi dir="auto">{{ card.program.name }}</bdi>
+                  </h2>
+                  <p class="suits" i18n>
+                    For: <bdi dir="auto">{{ card.program.suits }}</bdi>
+                  </p>
+                  <p class="weeks">{{ card.weeks }}</p>
+                </div>
+                @if (card.program.description; as description) {
+                  <p class="description" dir="auto">{{ description }}</p>
+                }
+
+                <app-disclosure class="week" label="Week 1" i18n-label data-sample-week>
+                  <ng-template appDisclosureContent>
+                    <ol class="sessions" role="list">
+                      @for (session of card.sessions; track session.key) {
+                        <li>
+                          <h3 class="session" dir="auto">{{ session.line }}</h3>
+                          <ul class="exercises" role="list">
+                            @for (exercise of session.exercises; track exercise.key) {
+                              <li>
+                                <bdi dir="auto">{{ exercise.name }}</bdi> · {{ exercise.sets }}
+                                @if (exercise.main) {
+                                  <span class="main" i18n>· main lift</span>
+                                }
+                              </li>
+                            }
+                          </ul>
+                        </li>
+                      }
+                    </ol>
+                  </ng-template>
+                </app-disclosure>
+
+                @if (card.maxes.length > 0) {
+                  <div class="maxes" data-maxes>
+                    <p class="maxes-head" i18n>Works its weights out from your max for:</p>
+                    <ul role="list">
+                      @for (max of card.maxes; track max.exerciseId) {
+                        <li [attr.data-max]="max.exerciseId">
+                          <bdi dir="auto">{{ max.name }}</bdi
+                          >: {{ max.detail }}
+                        </li>
+                      }
+                    </ul>
+                    @if (card.typing; as typing) {
+                      <button
+                        appButton
+                        type="button"
+                        variant="outlined"
+                        size="touch"
+                        class="type-maxes"
+                        [attr.aria-label]="typing.name"
+                        (click)="typeMaxes(card.program)"
+                        data-type-maxes
+                      >
+                        {{ typing.label }}
+                      </button>
+                    }
+                  </div>
+                }
+
+                <div class="start" data-start-line>
+                  @if (card.program.canStart) {
+                    <button
+                      appButton
+                      type="button"
+                      size="touch"
+                      [loading]="starting() === card.program.listingId"
+                      (click)="start(card.program)"
+                      data-start-program
+                    >
+                      <span i18n
+                        >Start <bdi dir="auto">{{ card.program.name }}</bdi></span
+                      >
+                    </button>
+                    @if (card.lastStart; as last) {
+                      <p class="muted" data-last-start i18n>
+                        Last day to start it under this pass: {{ last }}
+                      </p>
+                    }
+                  } @else if (card.refusal; as refusal) {
+                    <p class="refusal" dir="auto" data-refusal>{{ refusal }}</p>
+                  }
+                  @if (problemOf(card.program.listingId); as problem) {
+                    <p class="start-problem" role="alert" data-start-problem>{{ problem }}</p>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      }
+    }
+  }
+</div>
+
+<ng-template #startDialog let-dialog>
+  @if (question(); as asked) {
+    <app-confirm
+      [message]="asked.message"
+      [confirmLabel]="asked.confirm"
+      [cancelLabel]="startCancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #maxesSheet let-sheet>
+  @if (editing(); as program) {
+    @if (read(); as current) {
+      <app-house-program-maxes
+        [program]="program"
+        [today]="current.today"
+        (dirtyChange)="dirty = $event"
+        (busyChange)="sheetBusy.set($event)"
+        (savedSome)="markStale()"
+        (stale)="markStale()"
+        (closed)="maxesClosed($event, sheet)"
+      />
+    }
+  }
+</ng-template>
+
+<ng-template #confirmTemplate let-dialog>
+  @if (asking(); as leave) {
+    <app-confirm
+      [message]="leave.message"
+      [confirmLabel]="leave.confirm"
+      [cancelLabel]="leave.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

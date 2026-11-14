@@ -1,0 +1,11 @@
+// TB Gym's programs on a trainee's Training (notes plan N9c4): the way to them at the program's foot.
+.house-next {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-12);
+}
+.house-next p {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}

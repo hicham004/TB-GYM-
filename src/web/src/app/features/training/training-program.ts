@@ -77,6 +77,7 @@ const HISTORY_PREVIEW = 4;
     './training-program.scss',
     './training-program-lists.scss',
     './training-program-own.scss',
+    './training-program-house.scss',
   ],
 })
 export class TrainingProgram {
@@ -156,10 +157,27 @@ export class TrainingProgram {
   protected readonly doItNowConfirm = $localize`Start workout`;
   protected readonly doItNowCancel = $localize`Not now`;
   /**
-   * With no program, who reads the page (CLI-026): a trainee of TB Gym's own space starts workouts of
-   * their own here and from their history (notes plan N9b3); 'unknown' when the profile could not say.
+   * Who reads the page (CLI-026), asked once while Training is open: while no program runs a trainee of
+   * TB Gym's own space starts workouts of their own here and from their history (notes plan N9b3), and
+   * with one or without it they find TB Gym's programs (N9c4); 'unknown' when the profile could not say.
    */
   protected readonly profile = signal<'trainee' | 'coached' | 'unknown' | null>(null);
+  /**
+   * A trainee's program of TB Gym's whose Pro+ plan no longer grants (TRN-034, notes plan N9c3): its
+   * sessions are closed and what was logged stays. None opens the player, not even one already started:
+   * the player's reads no longer list a closed program's workout, so a link would open on nothing.
+   */
+  protected readonly planClosed = signal(false);
+  protected readonly planClosedWords = $localize`This program came with a plan that isn’t running now, so its sessions are closed. What you logged stays yours.`;
+  /**
+   * A trainee starts workouts of their own whenever no program runs (TRN-033): with none, beside one
+   * that is finished or yet to begin, and beside one whose plan stopped. Only a running program leads.
+   */
+  protected readonly ownWorkouts = computed(() => {
+    if (this.profile() !== 'trainee') return false;
+    const program = this.program();
+    return program === null || program.phase !== 'Current' || this.planClosed();
+  });
   /** The workout of one's own on its way to starting: 'new', or the finished one it starts from. */
   protected readonly startingOwn = signal<string | null>(null);
   protected readonly ownProblem = signal<{
@@ -249,16 +267,33 @@ export class TrainingProgram {
   protected async doItNow(session: ProgramSession): Promise<void> {
     if (this.starting() !== null) return;
     const planned = formatDate(session.date + 'T12:00:00', 'EEE d MMM', this.locale);
+    // A trainee of TB Gym's own space has no coach to see it; anyone else may.
     this.doItNowMessage.set(
-      $localize`It was planned for ${planned}:day:. Done now, it counts as done late, and your coach sees that.`,
+      this.profile() === 'trainee'
+        ? $localize`It was planned for ${planned}:day:. Done now, it counts as done late.`
+        : $localize`It was planned for ${planned}:day:. Done now, it counts as done late, and your coach sees that.`,
     );
     const dialog = this.dialogs.open<boolean>(this.doItNowDialog(), {
       title: $localize`Do ${session.name}:session: now?`,
       closeLabel: $localize`Close`,
     });
     if ((await firstValueFrom(dialog.closed)) !== true) return;
+    return this.startSession(session);
+  }
 
-    return this.scope.run('do-it-now', async (owner) => {
+  /**
+   * "Start now": a later session of this week that a trainee of TB Gym's own space may do before its
+   * day (TRN-020, notes plan N9c3). Nothing is asked: it counts on its own day, never late. The player
+   * plays only started workouts, so it is started here first, then opened.
+   */
+  protected startEarly(session: ProgramSession): Promise<void> {
+    if (this.starting() !== null) return Promise.resolve();
+    return this.startSession(session);
+  }
+
+  /** Starts the session's workout and opens the player on it; a refusal is said under the session. */
+  private async startSession(session: ProgramSession): Promise<void> {
+    return this.scope.run('start-session', async (owner) => {
       this.starting.set(session.sessionId);
       this.startProblem.set(null);
       try {
@@ -324,10 +359,17 @@ export class TrainingProgram {
         const read = mapTrainingProgram(
           await owner.wait(firstValueFrom(this.api.getMyTrainingProgram())),
         );
-        // With no program the page is the trainee's or a coach's client's: asked once, before it is drawn.
-        if (read.isAllowed && !read.program && this.profile() === null) {
+        // The page is the trainee's or a coach's client's, with a program or without: asked once, before
+        // it is drawn.
+        if (read.isAllowed && this.profile() === null) {
           this.profile.set(await owner.wait(this.readProfile()));
         }
+        // Only a trainee's program can lose its plan while it runs; a coach's client never asks.
+        this.planClosed.set(
+          this.profile() === 'trainee' && read.program?.phase === 'Current'
+            ? await owner.wait(this.readPlanClosed())
+            : false,
+        );
         this.read.set(read);
         this.openWeeks.set(new Set());
         this.followWeekLink();
@@ -347,6 +389,20 @@ export class TrainingProgram {
       return self.selfDirected === true ? 'trainee' : 'coached';
     } catch {
       return 'unknown';
+    }
+  }
+
+  /**
+   * Whether the trainee's running program of TB Gym's lost its plan (TRN-034): the upcoming read counts
+   * an open program only while its plan grants. When it cannot be read the page offers what it would,
+   * and the server still refuses a start and says why under the session.
+   */
+  private async readPlanClosed(): Promise<boolean> {
+    try {
+      const upcoming = await firstValueFrom(this.api.getMyUpcomingTraining());
+      return upcoming.isAllowed && !upcoming.hasAssignedProgram;
+    } catch {
+      return false;
     }
   }
 
@@ -458,6 +514,7 @@ export class TrainingProgram {
     this.starting.set(null);
     this.startProblem.set(null);
     this.profile.set(null);
+    this.planClosed.set(false);
     this.startingOwn.set(null);
     this.ownProblem.set(null);
   }

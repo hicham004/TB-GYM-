@@ -81,6 +81,7 @@ describe('toHousePlans', () => {
 
     expect(house.whishNumber).toBe('+961 70 123456');
     expect(house.plans[0]).toMatchObject({
+      tier: 'ProPlus',
       priceAmount: 47.5,
       durationCount: 4,
       description: null,

@@ -9,28 +9,40 @@ import { ApiClient } from '../../core/api/api-client';
 import type { ProgramDraftSummary, ProgramTemplatePage } from '../../core/api/generated';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { press, settle } from '../../../testing/dom';
-import { draftSummary, templateSummary } from '../../../testing/program-builder-fixtures';
+import {
+  draftSummary,
+  houseListing,
+  templateSummary,
+} from '../../../testing/program-builder-fixtures';
+import { HouseListingsApi } from './house-listings-api';
+import { toHouseListing, type HouseListing } from './house-listings.models';
 import { ProgramBuilderApi } from './program-builder-api';
 import { ProgramList } from './program-list';
+
+/** Outside TB Gym's own space the list of programs for trainees answers 404 (notes plan N9c4). */
+const notTheHouse = () => throwError(() => new HttpErrorResponse({ status: 404 }));
 
 async function render(
   list: () => Observable<ProgramTemplatePage>,
   drafts: ProgramDraftSummary[] = [],
+  listings: () => Observable<HouseListing[]> = notTheHouse,
 ) {
   const api = { listProgramTemplates: vi.fn(list) };
   const programApi = { listDrafts: vi.fn(() => of(drafts)) };
+  const houseApi = { list: vi.fn(listings) };
   TestBed.configureTestingModule({
     providers: [
       provideRouter([{ path: 'training/programs', component: ProgramList }]),
       { provide: ApiClient, useValue: api },
       { provide: ProgramBuilderApi, useValue: programApi },
+      { provide: HouseListingsApi, useValue: houseApi },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
     ],
   });
   const harness = await RouterTestingHarness.create();
   await harness.navigateByUrl('/training/programs', ProgramList);
   await settle(harness.fixture);
-  return { harness, host: harness.routeNativeElement as HTMLElement, api, programApi };
+  return { harness, host: harness.routeNativeElement as HTMLElement, api, programApi, houseApi };
 }
 
 const cardParts = (host: HTMLElement) =>
@@ -151,5 +163,42 @@ describe('Programs', () => {
     await settle(harness.fixture);
     expect(api.listProgramTemplates).toHaveBeenCalledTimes(2);
     expect(host.querySelectorAll('.card')).toHaveLength(1);
+  });
+
+  it('shows nothing of TB Gym’s programs for trainees outside its own space', async () => {
+    const { host, houseApi } = await render(() => of(page([templateSummary()])));
+
+    expect(houseApi.list).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('app-house-listings')?.textContent?.trim()).toBe('');
+    expect(host.querySelectorAll('h2')).toHaveLength(1);
+  });
+
+  it('lists the programs trainees can start after the cards, in TB Gym’s own space', async () => {
+    const { host, harness } = await render(
+      () => of(page([templateSummary()])),
+      [],
+      () => of([toHouseListing(houseListing())]),
+    );
+    // The section reads its own list once the cards are on screen.
+    await settle(harness.fixture);
+
+    const headings = Array.from(host.querySelectorAll('h2, h3')).map((heading) => textOf(heading));
+    expect(headings).toEqual(['Strength base', 'Programs trainees can start', 'Strength base']);
+    // New program stays the page's one filled button.
+    expect(host.querySelectorAll('.tb-button--filled')).toHaveLength(1);
+  });
+
+  it('keeps the cards when only the programs for trainees could not be read', async () => {
+    const { host, harness } = await render(
+      () => of(page([templateSummary()])),
+      [],
+      () => throwError(() => new HttpErrorResponse({ status: 500 })),
+    );
+    await settle(harness.fixture);
+
+    expect(host.querySelectorAll('.card')).toHaveLength(1);
+    expect(textOf(host.querySelector('[role="alert"]'))).toBe(
+      'Couldn’t load the programs for trainees.',
+    );
   });
 });

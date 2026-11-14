@@ -1,0 +1,142 @@
+@if (state() !== 'hidden') {
+  <section class="house" aria-labelledby="house-listings-title">
+    <header class="head">
+      <div class="intro">
+        <h2 id="house-listings-title" #heading tabindex="-1" i18n>Programs trainees can start</h2>
+        <p class="lede" i18n>
+          TB Gym’s trainees on Pro+ start these themselves, one at a time. A trainee’s copy shows
+          every week, even weeks not shared with clients.
+        </p>
+      </div>
+      @if (state() === 'ready') {
+        <div class="offer">
+          <button
+            appButton
+            type="button"
+            variant="outlined"
+            [disabled]="blocked() !== null"
+            [attr.aria-describedby]="blocked() ? 'house-listings-blocked' : null"
+            (click)="openNew()"
+            i18n
+          >
+            Offer a program
+          </button>
+          @if (blocked(); as why) {
+            <p id="house-listings-blocked" class="why">{{ why }}</p>
+          }
+        </div>
+      }
+    </header>
+
+    @if (state() === 'failed') {
+      <div class="failed">
+        <p role="alert" i18n>Couldn’t load the programs for trainees.</p>
+        <button
+          appButton
+          type="button"
+          variant="outlined"
+          [loading]="retrying()"
+          (click)="retry()"
+          i18n
+        >
+          Try again
+        </button>
+      </div>
+    } @else if (rows().length === 0) {
+      <p class="empty" i18n>No program is offered to trainees yet.</p>
+    } @else {
+      <ul class="rows" role="list">
+        @for (row of rows(); track row.id) {
+          <li class="row" [class.withdrawn]="!row.offered">
+            <div class="row-top">
+              <app-status-pill [label]="row.pill.label" [tone]="row.pill.tone" />
+              @if (row.block; as block) {
+                <span class="block" dir="auto">{{ block }}</span>
+              }
+            </div>
+            <h3 class="row-name" dir="auto">
+              <a [routerLink]="row.link">{{ row.name }}</a>
+            </h3>
+            <p class="suits">
+              <span i18n>For:</span>&ngsp;<bdi dir="auto">{{ row.suits }}</bdi>
+            </p>
+            <p class="facts">
+              <span>{{ row.weeks }}</span
+              >&ngsp;<span>{{ row.rounding }}</span
+              >&ngsp;<span>{{ row.started }}</span>
+            </p>
+            @if (row.archived) {
+              <p class="note" i18n>Archived: trainees don’t see it.</p>
+            }
+            @if (row.mixesUnits) {
+              <p class="warning" i18n>
+                Mixes kg and lb: trainees can’t start it until every load uses one unit.
+              </p>
+            }
+            <div class="actions">
+              @if (row.offered) {
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  [attr.data-edit]="row.templateId"
+                  [attr.aria-label]="row.editLabel"
+                  (click)="openEdit(row.templateId)"
+                  i18n
+                >
+                  Edit
+                </button>
+                <button
+                  appButton
+                  type="button"
+                  variant="text"
+                  [loading]="working() === row.templateId"
+                  [attr.aria-label]="row.withdrawLabel"
+                  (click)="withdraw(row.templateId)"
+                  i18n
+                >
+                  Withdraw
+                </button>
+              } @else {
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  [attr.data-offer-again]="row.templateId"
+                  [attr.aria-label]="row.offerAgainLabel"
+                  (click)="openEdit(row.templateId)"
+                  i18n
+                >
+                  Offer again
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+}
+
+<ng-template #listingSheet let-sheet>
+  <app-house-listing-sheet
+    [templates]="templates()"
+    [listings]="listings()"
+    [fixed]="sheetFor()"
+    (dirtyChange)="dirty = $event"
+    (busyChange)="sheetBusy.set($event)"
+    (stale)="read()"
+    (closed)="sheetClosed($event, sheet)"
+  />
+</ng-template>
+
+<ng-template #leaveDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

@@ -527,4 +527,8 @@ describe('the client’s max history (STR-015)', () => {
       'Estimated (Epley)',
     );
   });
+
+  it('says a training max the trainee typed for a program of TB Gym’s as theirs (N9c4)', () => {
+    expect(historySourceWords(row({ methodKey: 'TraineeTyped' }))).toBe('Typed by the trainee');
+  });
 });

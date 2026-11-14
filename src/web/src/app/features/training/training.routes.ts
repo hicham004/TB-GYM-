@@ -1,12 +1,14 @@
 import { Routes } from '@angular/router';
 import { clientGuard, coachGuard } from '../../core/auth/auth.guards';
-import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
+import { confirmBeforeLeaving, confirmSheetLeave } from '../../core/forms/leave-guard';
 import { FULL_SCREEN, REDESIGNED } from '../../core/theme/redesigned-route';
 
 export const trainingRoutes: Routes = [
   {
     path: 'programs',
     canActivate: [coachGuard],
+    // The house's list of programs for trainees edits in sheets (notes plan N9c4).
+    canDeactivate: [confirmSheetLeave],
     title: $localize`Programs | TB Gym`,
     data: REDESIGNED,
     loadComponent: () => import('./program-list').then((module) => module.ProgramList),
@@ -66,6 +68,16 @@ export const trainingRoutes: Routes = [
     title: $localize`Exercise | TB Gym`,
     data: REDESIGNED,
     loadComponent: () => import('./pool-exercise').then((module) => module.PoolExercise),
+  },
+  {
+    // TB Gym's programs for a self-directed trainee of the house (notes plan N9c4, TRN-034): whom each suits, a
+    // sample week, the maxes it reads, and Start under a Pro+ pass. The server answers 404 for anyone else.
+    path: 'house-programs',
+    canActivate: [clientGuard],
+    canDeactivate: [confirmSheetLeave],
+    title: $localize`Programs | TB Gym`,
+    data: REDESIGNED,
+    loadComponent: () => import('./house-programs').then((module) => module.HousePrograms),
   },
   { path: '', redirectTo: 'programs', pathMatch: 'full' },
 ];

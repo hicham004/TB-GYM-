@@ -21,17 +21,30 @@ import { Icon } from '../../ui/icon';
 import { SectionNav } from '../../ui/section-nav';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
+import { HouseListings } from './house-listings';
 import { ProgramBuilderApi } from './program-builder-api';
 import { draftCard, programCard } from './program-builder.models';
 import { numeric } from './training-builder.models';
 
 /**
  * Programs (C4): the coach's programs as cards, each opening in the builder. The first thing on the
- * page is New program (plan §2 rule 1); an empty workspace is invited to build its first one.
+ * page is New program (plan §2 rule 1); an empty workspace is invited to build its first one. In TB
+ * Gym's own space the programs its trainees can start follow the cards (notes plan N9c4); the section
+ * reads its own list, so a failure there never fails the cards.
  */
 @Component({
   selector: 'app-program-list',
-  imports: [Button, ButtonLink, EmptyState, Icon, RouterLink, SectionNav, Skeleton, StatusPill],
+  imports: [
+    Button,
+    ButtonLink,
+    EmptyState,
+    HouseListings,
+    Icon,
+    RouterLink,
+    SectionNav,
+    Skeleton,
+    StatusPill,
+  ],
   templateUrl: './program-list.html',
   styleUrl: './program-list.scss',
 })
@@ -50,7 +63,7 @@ export class ProgramList {
   ];
   protected readonly loadingLabel = $localize`Loading your programs…`;
 
-  private readonly templates = signal<ProgramTemplateSummary[]>([]);
+  protected readonly templates = signal<ProgramTemplateSummary[]>([]);
   /** The coach's new programs not published yet (TRN-024); changes to saved ones ride their card. */
   private readonly newDrafts = signal<ProgramDraftSummary[]>([]);
   private readonly total = signal(0);

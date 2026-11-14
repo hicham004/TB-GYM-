@@ -1468,6 +1468,99 @@ describe('TodayTraining, the audit’s player fixes', () => {
     });
   });
 
+  /**
+   * A program of TB Gym's whose plan stopped (TRN-034, notes plan N9c4): nothing more is logged and no
+   * read lists the workout any more, so the page keeps it, says why, and Finish still works.
+   */
+  describe('a program whose plan stopped', () => {
+    const closed = () =>
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 409,
+            error: { code: 'program_plan_closed', message: 'Server wording' },
+          }),
+      );
+    const words =
+      'This program came with a plan that isn’t running now, so its sessions are closed. What you logged stays yours.';
+
+    it('says so for a set, reads nothing again, and lets the workout be finished', async () => {
+      const getMyTrainingToday = vi.fn(() => of(twoSetDay(false, 3)));
+      const record = vi.fn(closed);
+      const { fixture, host, api } = await render({
+        getMyTrainingToday,
+        recordMyTrainingSet: record,
+      });
+      const [first, second] = host.querySelectorAll<HTMLElement>('.set-card');
+      fill(first, 'Actual repetitions', '9');
+      fill(second, 'Actual repetitions', '4');
+      await settle(fixture);
+      press(first, 'Log set');
+      await settle(fixture);
+
+      expect(record).toHaveBeenCalledTimes(1);
+      expect(getMyTrainingToday).toHaveBeenCalledTimes(1);
+      expect(textOf(query(host, '#training-error-summary'))).toBe(words);
+      expect(host.textContent).not.toContain('another phone or tab');
+      expect(host.textContent).not.toContain('Server wording');
+      // The workout stays on screen; what can no longer be logged goes back to what the server holds.
+      expect(host.querySelectorAll('.set-card')).toHaveLength(2);
+      expect(field(first, 'Actual repetitions').value).toBe('6');
+      expect(field(second, 'Actual repetitions').value).toBe('6');
+      expect(await fixture.componentInstance.canLeave()).toBe(true);
+
+      press(host, 'Finish workout');
+      await settle(fixture);
+      expect(host.textContent).toContain('0 of 2 sets logged');
+      press(host, 'Confirm finish');
+      await settle(fixture);
+
+      expect(api.completeMyWorkout).toHaveBeenCalledExactlyOnceWith('execution-1', { version: 3 });
+      expect(getMyTrainingToday).toHaveBeenCalledTimes(1);
+      expect(host.textContent).toContain('Workout completed.');
+    });
+
+    it('says so for a swap and for a note, and reads nothing again', async () => {
+      const swappable = day({
+        workouts: [
+          workout({
+            exercises: [
+              exercise({
+                modificationPolicy: 'CoachApprovedSwap',
+                alternatives: [{ exerciseId: 'exercise-2', name: 'Hack squat' }],
+              }),
+            ],
+          }),
+        ],
+      });
+      const getMyTrainingToday = vi.fn(() => of(swappable));
+      const { fixture, host, api } = await render({
+        getMyTrainingToday,
+        substituteMyTrainingExercise: vi.fn(closed),
+        addWorkoutNote: vi.fn(closed),
+      });
+
+      press(host, 'Swap exercise');
+      await settle(fixture);
+      press(menuList(), 'Hack squat');
+      await settle(fixture);
+      expect(textOf(query(host, '#training-error-summary'))).toBe(words);
+      expect(host.textContent).not.toContain('Swapped to Hack squat.');
+
+      await toggleFold(fixture, host, 'Note for your coach');
+      fill(host, 'Workout note', 'Felt strong.');
+      await settle(fixture);
+      press(host, 'Send note');
+      await settle(fixture);
+      expect(api.addWorkoutNote).toHaveBeenCalledTimes(1);
+      expect(textOf(query(host, '#training-error-summary'))).toBe(words);
+      // The note stays to copy elsewhere; the workout stays on screen.
+      expect(field(host, 'Workout note').value).toBe('Felt strong.');
+      expect(getMyTrainingToday).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('.set-card')).not.toBeNull();
+    });
+  });
+
   describe('leaving (WEA-1)', () => {
     it('asks before dropping a set changed but not logged', async () => {
       const { fixture, host } = await render();

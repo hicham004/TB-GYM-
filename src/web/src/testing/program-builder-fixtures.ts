@@ -3,6 +3,7 @@ import type {
   ExercisePrescriptionView,
   ExerciseSearchResult,
   ExerciseView,
+  HouseProgramListingView,
   MovementPattern,
   ProgramDraftSaveView,
   ProgramDraftSummary,
@@ -354,3 +355,30 @@ export const LIBRARY: ExerciseView[] = [
     mediaAssetIds: ['media-row'],
   }),
 ];
+
+/**
+ * One program TB Gym offers its trainees, as its staff read it (notes plans N9c3 and N9c4): Strength base,
+ * block 1 of the Foundations run, offered and started twice. Numbers come as the server may send them.
+ */
+export function houseListing(
+  overrides: Partial<HouseProgramListingView> = {},
+): HouseProgramListingView {
+  return {
+    listingId: 'listing-1',
+    templateId: 'template-1',
+    templateName: 'Strength base',
+    templateVersionId: 'version-2',
+    weeks: 2,
+    loadUnit: 'Kilogram',
+    mixesUnits: false,
+    suits: 'New to the barbell, two days a week.',
+    runName: 'Foundations',
+    runPosition: 1,
+    loadIncrement: 2.5,
+    loadRoundingMode: 'Nearest',
+    isOffered: true,
+    timesStarted: 2,
+    version: 3,
+    ...overrides,
+  };
+}

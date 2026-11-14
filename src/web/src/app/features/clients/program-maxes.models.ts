@@ -108,6 +108,9 @@ export function historySourceWords(record: StrengthMaxView, locale = 'en'): stri
     case 'CoachSelection':
     case 'CoachEntry':
       return $localize`Recorded by a coach`;
+    // A training max a trainee of TB Gym's own space typed for a program they started (N9c3).
+    case 'TraineeTyped':
+      return $localize`Typed by the trainee`;
     case 'TestedLift':
       return $localize`Tested`;
     default:

@@ -7,6 +7,7 @@ import type {
   HousePlanAskView,
   HousePlanOfferView,
   HousePlansView,
+  HouseTier,
   OfferDurationUnit,
 } from '../../core/api/generated';
 import type { StatusPillTone } from '../../ui/status-pill';
@@ -32,6 +33,8 @@ export type HouseAskState = HousePlanAskState;
 export interface HouseOffer {
   readonly offerId: string;
   readonly productId: string;
+  /** Which of the house's tiers it sells: the programs page offers "Ask for Pro+" only while Pro+ is on sale. */
+  readonly tier: HouseTier;
   readonly name: string;
   readonly description: string | null;
   readonly optionLabel: string;
@@ -86,6 +89,7 @@ export function toHouseOffer(view: HousePlanOfferView): HouseOffer {
   return {
     offerId: view.offerId,
     productId: view.productId,
+    tier: view.tier,
     name: view.name,
     description: view.description?.trim() || null,
     optionLabel: view.optionLabel,

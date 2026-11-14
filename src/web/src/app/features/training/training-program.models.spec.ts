@@ -105,6 +105,24 @@ describe('mapTrainingProgram', () => {
     ]);
   });
 
+  it('offers an early start only where the server says so, on a session still to come (notes plan N9c4)', () => {
+    const sessions = withWeek3(
+      { ...programSession('early', 'Upper B', '2026-10-02', 'Upcoming'), canStartEarly: true },
+      { ...programSession('kept', 'Lower B', '2026-10-03', 'Upcoming'), canStartEarly: false },
+      // A read from before early starts carries no flag.
+      programSession('old', 'Upper C', '2026-10-04', 'Upcoming'),
+      // Once started it is no longer to come.
+      { ...programSession('begun', 'Lower C', '2026-10-01', 'InProgress'), canStartEarly: true },
+    ).weeks[2].sessions;
+    expect(sessions.map((session) => [session.sessionId, session.canStartEarly])).toEqual([
+      ['early', true],
+      ['kept', false],
+      ['old', false],
+      ['begun', false],
+    ]);
+    expect(sessions[0]).toMatchObject({ opensPlayer: false, canDoNow: false });
+  });
+
   it('opens the player only for today’s sessions and unfinished ones', () => {
     const sessions = withWeek3(
       programSession('a', 'Earlier', '2026-09-28', 'Completed'),
@@ -137,6 +155,22 @@ describe('programAction', () => {
     );
     const action = programAction(plan, PROGRAM_TODAY);
     expect(action.kind === 'continue' && action.session.sessionId).toBe('now');
+  });
+
+  it('continues a session started early today before today’s own (TRN-020, notes plan N9c4)', () => {
+    const plan = withWeek3(programSession('due', 'Lower A', PROGRAM_TODAY, 'Today'), {
+      ...programSession('early', 'Upper B', '2026-10-02', 'InProgress'),
+      startedOn: PROGRAM_TODAY,
+    });
+    const action = programAction(plan, PROGRAM_TODAY);
+    expect(action.kind === 'continue' && action.session.sessionId).toBe('early');
+
+    // Started early on an earlier day, it waits behind today's session.
+    const earlier = withWeek3(programSession('due', 'Lower A', PROGRAM_TODAY, 'Today'), {
+      ...programSession('early', 'Upper B', '2026-10-02', 'InProgress'),
+      startedOn: '2026-09-29',
+    });
+    expect(programAction(earlier, PROGRAM_TODAY).kind).toBe('start');
   });
 
   it('then an unfinished earlier session, today’s finished one, and what comes next', () => {

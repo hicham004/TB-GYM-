@@ -2,14 +2,18 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page, Route } from '@playwright/test';
 import type {
   CreateProgramDraftRequest,
+  HouseProgramListingView,
+  OfferHouseProgramRequest,
   PreviewWeekProgressionRequest,
   ProgramDraftContent,
   ProgramTemplateVersionView,
   PublishProgramDraftRequest,
   SaveProgramDraftRequest,
+  WithdrawHouseProgramRequest,
 } from '../src/app/core/api/generated';
 import {
   draftSummary,
+  houseListing,
   LIBRARY,
   libraryPage,
   libraryQueryOf,
@@ -17,6 +21,7 @@ import {
   templateSummary,
   versionView,
 } from '../src/testing/program-builder-fixtures';
+import { chooseOption } from './kit-controls';
 import {
   COACH_MEMBERSHIP,
   expect,
@@ -26,6 +31,12 @@ import {
   test,
   waitForFonts,
 } from './support';
+
+/**
+ * Programs asks for TB Gym's programs for trainees (notes plan N9c4); outside TB Gym's own space the
+ * server answers 404, which the browser logs, and the section shows nothing.
+ */
+const NOT_THE_HOUSE = /status of 404 .*\/api\/training\/house-programs/;
 
 /**
  * The program builder (C4, R4.1 and R4.2a) in a real browser: Lea, a coach, opens "Strength base"
@@ -99,6 +110,8 @@ async function openBuilder(
       'GET /api/training/templates': (route: Route) =>
         json(route, 200, { items: [templateSummary()], total: 1, skip: 0, take: 100 }),
       'GET /api/training/program-drafts': (route: Route) => json(route, 200, []),
+      // Leaving the builder lands on Programs, which asks for TB Gym's programs for trainees.
+      'GET /api/training/house-programs': (route: Route) => json(route, 404, {}),
       'GET /api/training/templates/template-1': (route: Route) =>
         json(route, 200, templateSummary()),
       'GET /api/training/template-versions/version-2': (route: Route) =>
@@ -196,41 +209,55 @@ async function drag(page: Page, from: Locator, to: Locator, at = 0.5) {
 
 const week = (page: Page, index: number) => page.locator('section.week').nth(index);
 
-test('Programs at 390px and 1440px lists every program as a card, the coach’s new ones first', async ({
-  page,
-}) => {
-  for (const [width, height] of [
-    [390, 844],
-    [1440, 900],
-  ] as const) {
-    await page.setViewportSize({ width, height });
-    await mockSession(page, {
-      memberships: [COACH_MEMBERSHIP],
-      extra: {
-        'GET /api/training/templates': (route: Route) =>
-          json(route, 200, { items: [templateSummary()], total: 1, skip: 0, take: 100 }),
-        'GET /api/training/program-drafts': (route: Route) =>
-          json(route, 200, [
-            draftSummary({ id: 'draft-new', templateId: null, name: 'Hypertrophy block' }),
-          ]),
-      },
-    });
-    await page.goto('/training/programs');
-    await expect(page.getByRole('heading', { name: 'Programs', level: 1 })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Strength base' })).toHaveAttribute(
-      'href',
-      '/training/programs/template-1',
-    );
-    await expect(page.getByRole('link', { name: 'Hypertrophy block' })).toHaveAttribute(
-      'href',
-      '/training/programs/new?draft=draft-new',
-    );
-    await expect(page.locator('.card').first()).toContainText(
-      'Only you can see it until you publish it',
-    );
-    await expectNoHorizontalOverflow(page);
-    await axe(page);
-  }
+test.describe('Programs in a coach’s own space', () => {
+  test.use({ allowedConsoleErrors: { patterns: [NOT_THE_HOUSE] } });
+
+  test('Programs at 390px and 1440px lists every program as a card, the coach’s new ones first', async ({
+    page,
+  }) => {
+    let houseReads = 0;
+    for (const [width, height] of [
+      [390, 844],
+      [1440, 900],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await mockSession(page, {
+        memberships: [COACH_MEMBERSHIP],
+        extra: {
+          'GET /api/training/templates': (route: Route) =>
+            json(route, 200, { items: [templateSummary()], total: 1, skip: 0, take: 100 }),
+          'GET /api/training/program-drafts': (route: Route) =>
+            json(route, 200, [
+              draftSummary({ id: 'draft-new', templateId: null, name: 'Hypertrophy block' }),
+            ]),
+          'GET /api/training/house-programs': (route: Route) => {
+            houseReads += 1;
+            return json(route, 404, {});
+          },
+        },
+      });
+      await page.goto('/training/programs');
+      await expect(page.getByRole('heading', { name: 'Programs', level: 1 })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Strength base' })).toHaveAttribute(
+        'href',
+        '/training/programs/template-1',
+      );
+      await expect(page.getByRole('link', { name: 'Hypertrophy block' })).toHaveAttribute(
+        'href',
+        '/training/programs/new?draft=draft-new',
+      );
+      await expect(page.locator('.card').first()).toContainText(
+        'Only you can see it until you publish it',
+      );
+      // Outside TB Gym's own space nothing of its programs for trainees shows.
+      await expect.poll(() => houseReads).toBeGreaterThan(0);
+      await expect(page.getByRole('heading', { name: 'Programs trainees can start' })).toHaveCount(
+        0,
+      );
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+    }
+  });
 });
 
 test('the builder takes drags, keeps them as the coach’s draft, and publishes it', async ({
@@ -331,7 +358,7 @@ test.describe('with no connection', () => {
   // rejection nobody handled, or an uncaught page error — still fails through the guard.
   test.use({
     allowedConsoleErrors: {
-      patterns: [/ERR_INTERNET_DISCONNECTED .*program-drafts/],
+      patterns: [/ERR_INTERNET_DISCONNECTED .*program-drafts/, NOT_THE_HOUSE],
     },
   });
 
@@ -820,4 +847,276 @@ test('the program picks one formula for loads from RPE, and every set follows it
     '3 × 5 · RPE 7 · 79% of training max',
   );
   await expectNoHorizontalOverflow(page);
+});
+
+// ---------- TB Gym's own space: the programs its trainees can start (notes plan N9c4) ----------
+
+const HOUSE_COACH = {
+  tenantId: '00000000-0000-4000-8000-0000000000f1',
+  tenantName: 'TB Gym coaching space',
+  tenantSlug: 'tb-gym-coaching-space',
+  role: 'Coach',
+};
+
+const PLACE_TAKEN =
+  '"Strength base" is already block 1 of Foundations. Give this one another place, or withdraw that one first.';
+
+interface HouseSent {
+  offers: OfferHouseProgramRequest[];
+  withdrawals: WithdrawHouseProgramRequest[];
+  /** Each csrf read and write, in order, so a fresh token is seen before each write. */
+  calls: string[];
+}
+
+/**
+ * Programs in TB Gym's own space, as a coach of it reads them: Strength base offered as block 1 of
+ * Foundations, Powerbuilding withdrawn, and Upper lower published and not listed yet. The list is the
+ * server's: an offer or a withdrawal changes what the next read answers.
+ */
+async function openHousePrograms(
+  page: Page,
+  width: number,
+  height: number,
+  colorScheme: 'light' | 'dark' = 'light',
+): Promise<HouseSent> {
+  const sent: HouseSent = { offers: [], withdrawals: [], calls: [] };
+  let listings: HouseProgramListingView[] = [
+    houseListing(),
+    houseListing({
+      listingId: 'listing-3',
+      templateId: 'template-3',
+      templateName: 'Powerbuilding',
+      suits: 'Lifters with a year behind them.',
+      runName: null,
+      runPosition: null,
+      weeks: 6,
+      isOffered: false,
+      timesStarted: 0,
+      version: 7,
+    }),
+  ];
+  await page.emulateMedia({ colorScheme });
+  await page.setViewportSize({ width, height });
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (!path.startsWith('/api/')) return;
+    if (path === '/api/auth/csrf' || request.method() !== 'GET') {
+      sent.calls.push(`${request.method()} ${path}`);
+    }
+  });
+  await mockSession(page, {
+    memberships: [HOUSE_COACH],
+    extra: {
+      'GET /api/training/templates': (route: Route) =>
+        json(route, 200, {
+          items: [
+            templateSummary(),
+            templateSummary({ id: 'template-2', name: 'Upper lower' }),
+            templateSummary({ id: 'template-3', name: 'Powerbuilding' }),
+          ],
+          total: 3,
+          skip: 0,
+          take: 100,
+        }),
+      'GET /api/training/program-drafts': (route: Route) => json(route, 200, []),
+      'GET /api/training/house-programs': (route: Route) => json(route, 200, listings),
+      'PUT /api/training/templates/template-2/house-listing': (route: Route) => {
+        const body = route.request().postDataJSON() as OfferHouseProgramRequest;
+        sent.offers.push(body);
+        if (body.runName === 'Foundations' && Number(body.runPosition) === 1) {
+          return json(route, 409, {
+            code: 'house_program_run_position_taken',
+            message: PLACE_TAKEN,
+          });
+        }
+        const offered = houseListing({
+          listingId: 'listing-2',
+          templateId: 'template-2',
+          templateName: 'Upper lower',
+          suits: body.suits ?? '',
+          runName: body.runName ?? null,
+          runPosition: body.runPosition ?? null,
+          timesStarted: 0,
+          version: 1,
+        });
+        listings = [listings[0], offered, listings[1]];
+        return json(route, 200, offered);
+      },
+      'POST /api/training/templates/template-1/house-listing/withdraw': (route: Route) => {
+        sent.withdrawals.push(route.request().postDataJSON() as WithdrawHouseProgramRequest);
+        const withdrawn = { ...listings[0], isOffered: false, version: 4 };
+        listings = [...listings.slice(1), withdrawn];
+        return json(route, 200, withdrawn);
+      },
+    },
+  });
+  await page.goto('/training/programs');
+  await expect(page.getByRole('heading', { name: 'Programs trainees can start' })).toBeVisible();
+  await waitForFonts(page);
+  // The session's own first token is not one of the writes'.
+  sent.calls.length = 0;
+  return sent;
+}
+
+const houseRow = (page: Page, name: string) =>
+  page
+    .locator('app-house-listings .row')
+    .filter({ has: page.getByRole('heading', { name, level: 3, exact: true }) });
+
+test.describe('TB Gym’s own space: the programs its trainees can start', () => {
+  test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/house-listing/] } });
+
+  test('a coach offers a program, hears a place already taken by its field, and withdraws another', async ({
+    page,
+  }) => {
+    const sent = await openHousePrograms(page, 1440, 900);
+    const section = page.locator('app-house-listings');
+
+    await expect(houseRow(page, 'Strength base')).toContainText('Block 1 of Foundations');
+    await expect(houseRow(page, 'Strength base')).toContainText(
+      'For: New to the barbell, two days a week.',
+    );
+    await expect(houseRow(page, 'Strength base')).toContainText(
+      '2 weeks · kg Loads rounded to 2.5 kg, nearest Started 2 times',
+    );
+    await expect(houseRow(page, 'Powerbuilding').locator('app-status-pill')).toHaveText(
+      'Withdrawn',
+    );
+    await expect(
+      houseRow(page, 'Strength base').getByRole('link', { name: 'Strength base' }),
+    ).toHaveAttribute('href', '/training/programs/template-1');
+    // New program stays the page's one filled button.
+    await expect(page.locator('.tb-button--filled')).toHaveCount(1);
+    await axe(page);
+
+    await section.getByRole('button', { name: 'Offer a program' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Offer to trainees' });
+    await expect(sheet).toContainText(
+      'A trainee’s copy shows every week, even weeks not shared with clients.',
+    );
+    await chooseOption(sheet, 'Program', 'Upper lower');
+    await sheet.getByLabel('Whom it suits').fill('Two days a week, any level.');
+    await sheet.getByLabel('Run (optional)').fill('  Foundations ');
+    await sheet.getByLabel('Block number').fill('1');
+    await sheet.getByRole('button', { name: 'Offer to trainees' }).click();
+    await expect(sheet.getByLabel('Block number')).toHaveAccessibleDescription(PLACE_TAKEN);
+    await expect(sheet.locator('app-form-summary')).toHaveText('Check the fields marked above.');
+    await axe(page);
+    await page.screenshot({ path: test.info().outputPath('n9c4-offer-taken-1440.png') });
+
+    await sheet.getByLabel('Block number').fill('2');
+    await sheet.getByRole('button', { name: 'Offer to trainees' }).click();
+    await expect(sheet).toBeHidden();
+    await expect(
+      page.locator('.tb-toast__message', { hasText: 'Upper lower is offered to trainees.' }),
+    ).toBeVisible();
+    await expect(houseRow(page, 'Upper lower')).toContainText('Block 2 of Foundations');
+    expect(sent.offers).toEqual([
+      {
+        suits: 'Two days a week, any level.',
+        runName: 'Foundations',
+        runPosition: 1,
+        loadIncrement: 2.5,
+        loadRoundingMode: 'Nearest',
+        version: null,
+      },
+      {
+        suits: 'Two days a week, any level.',
+        runName: 'Foundations',
+        runPosition: 2,
+        loadIncrement: 2.5,
+        loadRoundingMode: 'Nearest',
+        version: null,
+      },
+    ]);
+
+    await houseRow(page, 'Strength base')
+      .getByRole('button', { name: 'Withdraw, Strength base' })
+      .click();
+    await expect(houseRow(page, 'Strength base').locator('app-status-pill')).toHaveText(
+      'Withdrawn',
+    );
+    await expect(
+      page.locator('.tb-toast__message', {
+        hasText: 'Strength base withdrawn. Trainees who started it keep their copy.',
+      }),
+    ).toBeVisible();
+    await expect(
+      houseRow(page, 'Strength base').getByRole('button', { name: 'Offer again, Strength base' }),
+    ).toBeFocused();
+    expect(sent.withdrawals).toEqual([{ version: 3 }]);
+    // A fresh antiforgery token before each of the three writes.
+    expect(sent.calls).toEqual([
+      'GET /api/auth/csrf',
+      'PUT /api/training/templates/template-2/house-listing',
+      'GET /api/auth/csrf',
+      'PUT /api/training/templates/template-2/house-listing',
+      'GET /api/auth/csrf',
+      'POST /api/training/templates/template-1/house-listing/withdraw',
+    ]);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c4-house-programs-1440.png'),
+      fullPage: true,
+    });
+  });
+
+  for (const [width, height] of [
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    for (const colorScheme of ['light', 'dark'] as const) {
+      test(`the section and its sheet at ${width}px in ${colorScheme} pass axe with no sideways scroll`, async ({
+        page,
+      }) => {
+        await openHousePrograms(page, width, height, colorScheme);
+
+        await expectNoHorizontalOverflow(page);
+        await axe(page);
+        await page.screenshot({
+          path: test.info().outputPath(`n9c4-house-programs-${width}-${colorScheme}.png`),
+          fullPage: true,
+        });
+
+        await houseRow(page, 'Strength base')
+          .getByRole('button', { name: 'Edit for trainees, Strength base' })
+          .click();
+        const sheet = page.getByRole('dialog', { name: 'Edit for trainees' });
+        await expect(sheet.getByLabel('Whom it suits')).toHaveValue(
+          'New to the barbell, two days a week.',
+        );
+        await sheet.getByText('Rounding', { exact: true }).click();
+        await expect(sheet.getByLabel('Round loads to')).toHaveValue('2.5');
+        await expectNoHorizontalOverflow(page);
+        await axe(page);
+        await page.screenshot({
+          path: test.info().outputPath(`n9c4-house-sheet-${width}-${colorScheme}.png`),
+        });
+
+        if (width === 390) {
+          // 200% text: the page and the sheet reflow, nothing scrolls sideways.
+          await page.evaluate(() => {
+            document.documentElement.style.fontSize = '32px';
+          });
+          await expectNoHorizontalOverflow(page);
+          const body = page.locator('.tb-modal__body');
+          expect(
+            await body.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+          ).toBe(true);
+          await axe(page);
+          await page.screenshot({
+            path: test.info().outputPath(`n9c4-house-sheet-390-${colorScheme}-200.png`),
+          });
+          await sheet.getByRole('button', { name: 'Not now' }).click();
+          await expect(sheet).toBeHidden();
+          await expectNoHorizontalOverflow(page);
+          await page.screenshot({
+            path: test.info().outputPath(`n9c4-house-programs-390-${colorScheme}-200.png`),
+            fullPage: true,
+          });
+        }
+      });
+    }
+  }
 });

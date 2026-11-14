@@ -117,9 +117,21 @@ function isSwapLocked(error: unknown): boolean {
   );
 }
 
+/**
+ * The workout's program of TB Gym's lost its plan (TRN-034, notes plan N9c3): nothing more is logged,
+ * finishing stays open, and no read lists the workout any more, so the page must not read it again.
+ */
+function isPlanClosed(error: unknown): boolean {
+  return (
+    error instanceof HttpErrorResponse &&
+    error.status === 409 &&
+    (error.error as { code?: string } | null)?.code === 'program_plan_closed'
+  );
+}
+
 /** Another tab or phone changed or finished this workout since this page read it. */
 function isConflict(error: unknown): error is HttpErrorResponse {
-  return error instanceof HttpErrorResponse && error.status === 409;
+  return error instanceof HttpErrorResponse && error.status === 409 && !isPlanClosed(error);
 }
 
 /** The same demos in the same order: a reload that reads them again changes nothing in the clip. */
@@ -948,6 +960,7 @@ export class TodayTraining implements HoldsUnsavedWork {
             if (!this.ownsContext(generation)) {
               return false;
             }
+            if (isPlanClosed(error)) this.dropUnloggedSets(workoutId);
             this.reportSetError(setId, this.saveFailure(error, workoutId));
             return false;
           } finally {
@@ -970,8 +983,31 @@ export class TodayTraining implements HoldsUnsavedWork {
     );
   }
 
+  /**
+   * The workout's program lost its plan (TRN-034): no set of it can be logged any more, so what this page
+   * typed for it goes back to what the server holds, and Finish and leaving wait for nothing. The page is
+   * not read again, since no read lists the workout now: it stays on screen to be finished.
+   */
+  private dropUnloggedSets(workoutId: string): void {
+    const day = this.day();
+    const workout = day?.workouts.find((item) => item.workoutExecutionId === workoutId);
+    if (!day || !workout) return;
+    const kept = reconcileWorkoutSetDrafts({ ...day, workouts: [workout] }, {}, this.chosenUnits);
+    this.setDrafts.update((drafts) => {
+      const next = { ...drafts };
+      for (const [id, draft] of Object.entries(kept)) {
+        // A new revision, so a save still on its way cannot settle the dropped draft.
+        next[id] = { ...draft, revision: (drafts[id]?.revision ?? 0) + 1 };
+      }
+      return next;
+    });
+  }
+
   /** Why a set was not saved, in words the client can act on. */
   private saveFailure(error: unknown, workoutId: string): string {
+    if (isPlanClosed(error)) {
+      return apiErrorMessage(error, '');
+    }
     if (isConflict(error)) {
       return this.workoutFinished(workoutId) ||
         (error.error as { code?: string } | null)?.code === 'workout_immutable'

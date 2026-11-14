@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
+import { finishedProfile } from '../src/testing/intake-fixtures';
 import { personalRecord, programSummary } from '../src/testing/share-card-fixtures';
 import { historyPage, programView } from '../src/testing/training-program-fixtures';
 import {
@@ -160,6 +161,8 @@ async function openTraining(page: Page, width: number, summary: unknown, dark = 
       'GET /api/client-access/me': (route: Route) => json(route, 200, decisions),
       'GET /api/training/me/program': (route: Route) => json(route, 200, finished),
       'GET /api/training/me/history': (route: Route) => json(route, 200, historyPage()),
+      // Training asks who reads it, beside a program too (notes plan N9c4): a coach's client.
+      'GET /api/client-profile/me': (route: Route) => json(route, 200, finishedProfile()),
       'GET /api/training/me/programs/block-1/summary': (route: Route) => json(route, 200, summary),
     },
   });
